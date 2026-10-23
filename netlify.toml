@@ -1,0 +1,18 @@
+# Site estático (sem build). A única parte "servidor" é a função do link do formulário.
+
+[functions]
+  directory = "netlify/functions"
+
+# Link limpo do formulário, sem .html (e com o cartão de compartilhamento do WhatsApp)
+[[redirects]]
+  from = "/formulario"
+  to = "/.netlify/functions/formulario"
+  status = 200
+  force = true
+
+# Imagem do cartão de compartilhamento
+[[redirects]]
+  from = "/formulario-imagem"
+  to = "/.netlify/functions/formulario?img=1"
+  status = 200
+  force = true

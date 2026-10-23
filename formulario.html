@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex" />
+<title>Mentoria Viver de Shopee — Formulário</title>
+<meta name="description" content="Está pronto para levar seu e-commerce ao próximo nível? Preencha o formulário e dê o primeiro passo." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#08080d;
+    --bg-2:#0d0d15;
+    --surface:#15151f;
+    --surface-2:#1b1b28;
+    --border:rgba(255,255,255,.09);
+    --border-strong:rgba(255,255,255,.18);
+    --text:#f4f4f7;
+    --text-2:rgba(244,244,247,.62);
+    --text-3:rgba(244,244,247,.38);
+    --brand:#EE4D2D;
+    --brand-hover:#FF6B45;
+    --brand-weak:rgba(238,77,45,.16);
+    --warn-bg:#3a1f18;
+    --warn-text:#ffb199;
+    --warn-border:#5c2c20;
+    --ok:#12b76a;
+    --radius:16px;
+    --font-d:'Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --font-b:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --content-max:720px;
+    --scale:1;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%; height:-webkit-fill-available;}
+  html{-webkit-text-size-adjust:100%; text-size-adjust:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-b);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.001ms !important;transition-duration:.001ms !important;}
+  }
+
+  /* ---------- Textura de fundo: linhas concêntricas finas, como nas telas de referência ---------- */
+  .bg-lines{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background:
+      radial-gradient(1200px 900px at 78% -10%, color-mix(in srgb, var(--brand) 10%, transparent), transparent 60%),
+      radial-gradient(900px 700px at -10% 110%, color-mix(in srgb, var(--brand) 6%, transparent), transparent 55%),
+      var(--bg);
+  }
+  .bg-lines svg{position:absolute;inset:0;width:100%;height:100%;opacity:.5}
+  .bg-stars{position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,.35) 50%, transparent 51%),
+      radial-gradient(1px 1px at 70% 65%, rgba(255,255,255,.25) 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 40% 80%, rgba(255,255,255,.3) 50%, transparent 51%),
+      radial-gradient(1px 1px at 85% 20%, rgba(255,255,255,.28) 50%, transparent 51%),
+      radial-gradient(1px 1px at 55% 45%, rgba(255,255,255,.2) 50%, transparent 51%);
+    background-repeat:repeat; background-size:340px 340px;
+  }
+
+  /* ---------- Barra de progresso ---------- */
+  .progress-track{position:fixed;top:0;left:0;right:0;height:3px;background:var(--surface);z-index:50}
+  .progress-fill{height:100%;background:linear-gradient(90deg,var(--brand),var(--brand-hover));width:0%;transition:width .45s cubic-bezier(.65,0,.35,1)}
+
+  /* ---------- Layout raiz ---------- */
+  #app{position:relative;z-index:1;height:100%;height:100dvh;display:flex;flex-direction:column}
+  .step-counter{font-family:var(--font-b);font-size:12.5px;color:var(--text-3);font-variant-numeric:tabular-nums}
+
+  .stage{flex:1;position:relative;overflow:hidden}
+  @keyframes stepIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
+  .step{
+    position:absolute; inset:0;
+    padding:36px calc(26px + env(safe-area-inset-right)) 0 calc(26px + env(safe-area-inset-left));
+    display:flex; flex-direction:column;
+    max-width:var(--content-max); margin:0 auto; width:100%;
+    animation:stepIn .4s cubic-bezier(.22,1,.36,1);
+  }
+
+  .q-head{flex-shrink:0;margin-bottom:22px}
+  .q-title{font-family:var(--font-d);font-weight:800;font-size:clamp(22px,4.2vw,32px);line-height:1.24;letter-spacing:-.2px;margin:0}
+  .q-title .req{color:var(--brand);margin-left:2px}
+  .q-desc{margin:10px 0 0;font-size:13.5px;color:var(--text-3)}
+
+  .q-body{flex:1;overflow-y:auto;padding-bottom:110px;scrollbar-width:thin;scrollbar-color:var(--border-strong) transparent}
+  .q-body::-webkit-scrollbar{width:7px}
+  .q-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:8px}
+
+  /* ---------- Opções (single/multi select) ---------- */
+  .options{display:flex;flex-direction:column;gap:10px}
+  .opt{
+    display:flex;align-items:center;gap:12px;
+    padding:16px 18px; border-radius:13px;
+    background:var(--surface); border:1px solid var(--border);
+    color:var(--text); font-family:var(--font-b); font-size:15px; font-weight:500;
+    cursor:pointer; text-align:left; user-select:none;
+    transition:background .15s ease, border-color .15s ease, transform .1s ease;
+    -webkit-appearance:none; appearance:none; touch-action:manipulation;
+  }
+  .opt:active{transform:scale(.994)}
+  .opt.sel{background:var(--brand-weak); border-color:var(--brand); color:var(--text)}
+  .opt.sel .mark{color:var(--on-brand,#fff)}
+  .opt .mark{
+    flex-shrink:0; width:20px; height:20px; border-radius:6px;
+    border:1.5px solid var(--border-strong); display:grid; place-items:center;
+    transition:background .15s ease, border-color .15s ease;
+  }
+  .opt.single .mark{border-radius:50%}
+  .opt.sel .mark{background:var(--brand); border-color:var(--brand)}
+  .opt .mark svg{width:12px;height:12px;opacity:0;transform:scale(.5);transition:opacity .12s ease, transform .12s ease}
+  .opt.sel .mark svg{opacity:1;transform:scale(1)}
+  .opt .lbl{flex:1;line-height:1.35}
+
+  /* ---------- Campos de texto ---------- */
+  .field-group{display:flex;flex-direction:column;gap:26px}
+  .field{display:flex;flex-direction:column;gap:8px}
+  .field label{font-size:13px;color:var(--text-2);font-weight:600}
+  .field label .req{color:var(--brand)}
+  .field input{
+    background:transparent; border:none; border-bottom:1.5px solid var(--border-strong);
+    color:var(--text); font-family:var(--font-b); font-size:17px; padding:6px 2px 10px;
+    outline:none; transition:border-color .15s ease;
+    -webkit-appearance:none; appearance:none; border-radius:0;
+  }
+  .field input::placeholder{color:var(--text-3)}
+  .field input:focus{border-color:var(--brand)}
+  .field.err input{border-color:#e5484d}
+  .phone-row{display:flex;align-items:flex-end;gap:10px}
+  .phone-code{flex-shrink:0;display:flex;align-items:center;gap:5px;padding:6px 2px 10px;border-bottom:1.5px solid var(--border-strong);color:var(--text-2);font-size:15px}
+  .phone-code svg{width:11px;height:11px;opacity:.7}
+  .phone-row .field{flex:1}
+  .hp-field{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;opacity:0}
+
+  /* ---------- Aviso de validação ---------- */
+  .warn-box{
+    display:flex; gap:10px; align-items:flex-start;
+    background:var(--warn-bg); border:1px solid var(--warn-border); color:var(--warn-text);
+    padding:13px 15px; border-radius:12px; font-size:13px; line-height:1.5; margin-top:16px;
+    animation:shake .32s ease;
+  }
+  .warn-box > div > div + div{margin-top:6px}
+  @keyframes shake{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(2px)}30%,50%,70%{transform:translateX(-4px)}40%,60%{transform:translateX(4px)}}
+  .warn-box svg{flex-shrink:0;margin-top:1px}
+
+  /* ---------- Barra inferior fixa ---------- */
+  .footer-bar{
+    position:absolute; left:0; right:0; bottom:0;
+    padding:16px calc(26px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) calc(26px + env(safe-area-inset-left));
+    display:flex; gap:10px; align-items:center;
+    background:linear-gradient(0deg, var(--bg) 55%, transparent);
+  }
+  .footer-inner{max-width:var(--content-max);margin:0 auto;width:100%;display:flex;gap:10px}
+  .btn{
+    border:none; border-radius:12px; font-family:var(--font-b); font-weight:600; font-size:15px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;
+    transition:background .15s ease, opacity .15s ease, transform .1s ease;
+    -webkit-appearance:none; appearance:none; touch-action:manipulation;
+  }
+  .btn:active{transform:scale(.98)}
+  .btn-back{width:52px;height:52px;flex-shrink:0;background:var(--surface);color:var(--text-2);border:1px solid var(--border)}
+  .btn-primary{flex:1;height:52px;background:var(--brand);color:var(--on-brand,#fff)}
+  .btn-primary:disabled{opacity:.55;cursor:not-allowed}
+  @media (hover:hover) and (pointer:fine){
+    .opt:hover{background:var(--surface-2); border-color:var(--border-strong)}
+    .btn-back:hover{background:var(--surface-2)}
+    .btn-primary:hover:not(:disabled){background:var(--brand-hover)}
+  }
+  .btn-primary .spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- Tela de intro / final ---------- */
+  .cover{display:flex;flex-direction:column;justify-content:center;height:100%;padding:0 8px}
+  .cover-eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--brand);letter-spacing:.4px;text-transform:uppercase;margin-bottom:18px}
+  .cover-title{font-family:var(--font-d);font-weight:800;font-size:clamp(28px,6vw,44px);line-height:1.12;letter-spacing:-.5px;margin:0 0 18px}
+  .cover-sub{font-size:16px;color:var(--text-2);line-height:1.55;max-width:480px;margin:0 0 32px}
+  .cover .btn-primary{max-width:260px;padding:0 28px;flex:none;align-self:flex-start}
+  .final-icon{width:64px;height:64px;border-radius:18px;background:var(--brand-weak);color:var(--brand);display:grid;place-items:center;margin-bottom:22px}
+  .offline-note{margin-top:22px;font-size:12.5px;color:var(--text-3);border-top:1px solid var(--border);padding-top:14px;max-width:420px}
+
+  /* ---------- Loading ---------- */
+  .boot-loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:100}
+  .boot-loading .spin{width:26px;height:26px;border:2.5px solid rgba(255,255,255,.15);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite}
+
+  /* ---------- Celulares pequenos (iPhone SE e similares) ---------- */
+  @media (max-width:380px){
+    .q-title{font-size:clamp(20px,5.6vw,26px)}
+    .options{gap:8px}
+    .opt{padding:14px 15px;font-size:14px}
+  }
+  @media (max-width:480px){
+    .step{padding-top:28px; padding-left:calc(18px + env(safe-area-inset-left)); padding-right:calc(18px + env(safe-area-inset-right))}
+    .footer-bar{padding-top:14px; padding-left:calc(18px + env(safe-area-inset-left)); padding-right:calc(18px + env(safe-area-inset-right))}
+  }
+
+  /* ---------- Altura curta (celular deitado) — evita que o cabeçalho empurre
+     as opções pra fora da área visível antes mesmo de rolar ---------- */
+  @media (max-height:480px){
+    .step{padding-top:18px}
+    .q-head{margin-bottom:12px}
+    .q-title{font-size:clamp(18px,4vw,24px)}
+    .cover{padding-top:10px}
+    .cover-title{font-size:clamp(22px,5vw,30px);margin-bottom:10px}
+    .cover-sub{margin-bottom:18px}
+    .footer-bar{padding-top:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+    .btn-back,.btn-primary{height:44px}
+  }
+
+  /* ---------- Tablet e notebook pequeno: mais respiro, conteúdo centralizado
+     verticalmente em vez de sempre grudado no topo (fica mais "pensado" numa
+     tela grande, igual o resto de apps desse estilo se comportam) ---------- */
+  @media (min-width:760px){
+    :root{ --content-max:640px; }
+    .step{padding-top:64px}
+    .q-head{margin-bottom:26px}
+    .opt{padding:17px 20px}
+  }
+
+  /* ---------- Notebook / PC (telas de verdade, mouse+teclado) ---------- */
+  @media (min-width:1024px){
+    :root{ --content-max:680px; }
+    .q-title{font-size:clamp(26px,2.6vw,36px)}
+    .opt{font-size:15.5px}
+    .cover-title{font-size:clamp(34px,4.2vw,50px)}
+  }
+
+  /* ---------- Telas grandes: monitor grande / TV conectada ao PC ----------
+     Não dá pra distinguir TV de monitor só por CSS, então a regra é:
+     em qualquer viewport muito largo, aumenta tipografia, espaçamento e
+     alvos de toque/clique proporcionalmente, pra continuar legível de longe
+     (sofá) e não ficar um bloco de texto minúsculo perdido no meio da tela. */
+  @media (min-width:1600px){
+    :root{ --content-max:820px; }
+    body{ font-size:18px }
+    .q-title{font-size:clamp(34px,2.6vw,46px)}
+    .q-desc{font-size:16px}
+    .opt{padding:22px 26px;font-size:19px;border-radius:16px}
+    .opt .mark{width:24px;height:24px}
+    .field label{font-size:15px}
+    .field input{font-size:21px;padding:8px 2px 12px}
+    .btn-back,.btn-primary{height:64px;font-size:18px;border-radius:14px}
+    .btn-back{width:64px}
+    .cover-title{font-size:clamp(44px,3.4vw,64px)}
+    .cover-sub{font-size:19px;max-width:640px}
+    .cover .btn-primary{max-width:320px}
+    .final-icon{width:80px;height:80px}
+    .final-icon svg{width:40px;height:40px}
+    .progress-track{height:4px}
+  }
+  @media (min-width:2200px){
+    :root{ --content-max:960px; }
+    body{ font-size:20px }
+    .q-title{font-size:clamp(42px,2.4vw,58px)}
+    .opt{padding:26px 30px;font-size:22px}
+    .btn-back,.btn-primary{height:74px;font-size:21px}
+    .btn-back{width:74px}
+  }
+
+  /* Foco visível para navegação por teclado (essencial em notebook/PC e
+     Smart TVs navegadas por controle remoto/teclado) */
+  .opt:focus-visible, .btn:focus-visible, .field input:focus-visible{
+    outline:2px solid var(--brand); outline-offset:2px;
+  }
+
+  /* Campo de texto longo (mesmo estilo dos campos de linha) */
+  .field textarea{background:transparent;border:none;border-bottom:1.5px solid var(--border-strong);color:var(--text);font-family:var(--font-b);font-size:17px;padding:6px 2px 10px;outline:none;resize:vertical;border-radius:0;transition:border-color .15s ease;-webkit-appearance:none;appearance:none}
+  .field textarea::placeholder{color:var(--text-3)}
+  .field textarea:focus{border-color:var(--brand)}
+  .field.err textarea{border-color:#e5484d}
+  @media (min-width:1600px){ .field textarea{font-size:21px} }
+
+  /* ---------- Aparência editável pelo CRM (cores, fundo, logo) ---------- */
+  #lineGrad stop{stop-color:var(--brand)}
+  #lineGrad stop:nth-child(2){stop-color:var(--brand-hover)}
+  .bg-img,.bg-shade{position:fixed;inset:0;z-index:0;pointer-events:none;display:none}
+  .bg-img{background-size:cover;background-position:center}
+  .bg-shade{background:var(--bg)}
+  body.light .bg-stars,body.fundo-liso .bg-stars,body.fundo-imagem .bg-stars,
+  body.fundo-liso .bg-lines svg,body.fundo-imagem .bg-lines svg{display:none}
+  .cover-logo{display:block;max-height:52px;max-width:220px;object-fit:contain;margin:0 0 20px}
+</style>
+</head>
+<body>
+  <div class="bg-lines" id="bgLines"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1400" preserveAspectRatio="xMidYMid slice">
+<defs><linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%"/><stop offset="50%"/><stop offset="100%"/>
+</linearGradient></defs>
+<path d="M -100,-120.0 C 210.0,-210.0 1190.0,-30.0 1500,-80.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.050"/><path d="M -100,-20.0 C 218.0,-127.3 1186.0,87.3 1500,20.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.063"/><path d="M -100,80.0 C 226.0,-44.7 1182.0,204.7 1500,120.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.077"/><path d="M -100,180.0 C 234.0,38.0 1178.0,322.0 1500,220.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.090"/><path d="M -100,280.0 C 242.0,120.7 1174.0,439.3 1500,320.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.103"/><path d="M -100,380.0 C 250.0,203.3 1170.0,556.7 1500,420.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.117"/><path d="M -100,480.0 C 258.0,286.0 1166.0,674.0 1500,520.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.130"/><path d="M -100,580.0 C 266.0,368.7 1162.0,791.3 1500,620.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.143"/><path d="M -100,680.0 C 274.0,451.3 1158.0,908.7 1500,720.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.143"/><path d="M -100,780.0 C 282.0,534.0 1154.0,1026.0 1500,820.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.130"/><path d="M -100,880.0 C 290.0,616.7 1150.0,1143.3 1500,920.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.117"/><path d="M -100,980.0 C 298.0,699.3 1146.0,1260.7 1500,1020.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.103"/><path d="M -100,1080.0 C 306.0,782.0 1142.0,1378.0 1500,1120.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.090"/><path d="M -100,1180.0 C 314.0,864.7 1138.0,1495.3 1500,1220.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.077"/><path d="M -100,1280.0 C 322.0,947.3 1134.0,1612.7 1500,1320.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.063"/><path d="M -100,1380.0 C 330.0,1030.0 1130.0,1730.0 1500,1420.0" stroke="url(#lineGrad)" stroke-width="1" fill="none" opacity="0.050"/>
+</svg></div>
+  <div class="bg-stars"></div>
+  <div class="bg-img" id="bgImg"></div><div class="bg-shade" id="bgShade"></div>
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+  <div id="app"></div>
+  <div class="boot-loading" id="bootLoading"><div class="spin"></div></div>
+
+  <script>
+"use strict";
+/* ==========================================================================
+   Mentoria Viver de Shopee — formulário público.
+   Lê as perguntas da tabela `formularios` e envia as respostas pela função
+   `enviar_formulario` do Supabase, que cria o lead já classificado no CRM.
+   Quem edita as perguntas é o CRM (menu Formulário), não este arquivo.
+   A chave abaixo é a "anon" do Supabase: pública por desenho, protegida por RLS.
+   ========================================================================== */
+const SUPABASE_URL = "https://wwtwcstvbcybawhodhob.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3dHdjc3R2YmN5YmF3aG9kaG9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1OTMyMDUsImV4cCI6MjEwODE2OTIwNX0.zdIStjGOms4W5vlM5KD79RS0OhXvGO_jjLx9lgtXrYI";
+const FORM_KEY = "mentoria_viver_de_shopee";
+
+// Dentro do CRM (iframe ?preview=1): recebe as perguntas por postMessage e NÃO envia nada.
+const PREVIEW = new URLSearchParams(location.search).get("preview") === "1";
+const state = {
+  config: null, questions: [], screens: [], current: 0,
+  answers: {}, errors: {}, loading: true, loadError: false,
+  submitting: false, submitted: false, submitError: null,
+};
+
+const $ = (sel, ctx) => (ctx || document).querySelector(sel);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const apiHeaders = () => ({ apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY });
+
+// Canal de origem opcional no link: formulario.html?origem=Instagram
+const ORIGEM = (() => {
+  const p = new URLSearchParams(location.search);
+  return (p.get("origem") || p.get("utm_source") || "").trim().slice(0, 40);
+})();
+
+/* ---------- Aparência (cores, fundo, logo) definida no CRM ---------- */
+const hexOu = (c, padrao) => /^#[0-9a-fA-F]{6}$/.test(c || "") ? c : padrao;
+// Só aceita imagem enviada pelo CRM (data URI png/jpeg/webp): nunca uma URL arbitrária.
+const imgSegura = (u) => typeof u === "string" && u.length < 900000 && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+$/.test(u);
+function luminancia(h) {
+  const n = parseInt(h.slice(1), 16), f = (x) => { x /= 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); };
+  return .2126 * f((n >> 16) & 255) + .7152 * f((n >> 8) & 255) + .0722 * f(n & 255);
+}
+function applyVisual(v) {
+  v = v || {};
+  const marca = hexOu(v.corMarca, "#EE4D2D"), fundo = hexOu(v.corFundo, "#08080d"), texto = hexOu(v.corTexto, "#f4f4f7");
+  const vars = {
+    "--bg": fundo, "--bg-2": fundo, "--text": texto, "--brand": marca,
+    "--brand-hover": `color-mix(in srgb, ${marca} 85%, ${texto})`, "--brand-weak": `color-mix(in srgb, ${marca} 16%, transparent)`,
+    "--surface": `color-mix(in srgb, ${texto} 7%, ${fundo})`, "--surface-2": `color-mix(in srgb, ${texto} 11%, ${fundo})`,
+    "--border": `color-mix(in srgb, ${texto} 10%, transparent)`, "--border-strong": `color-mix(in srgb, ${texto} 20%, transparent)`,
+    "--text-2": `color-mix(in srgb, ${texto} 62%, transparent)`, "--text-3": `color-mix(in srgb, ${texto} 40%, transparent)`,
+    "--on-brand": luminancia(marca) > .5 ? "#111111" : "#ffffff",
+  };
+  Object.entries(vars).forEach(([k, val]) => document.documentElement.style.setProperty(k, val));
+  document.body.classList.toggle("light", luminancia(fundo) > .5);
+  const modo = v.fundo === "liso" || v.fundo === "imagem" ? v.fundo : "linhas";
+  document.body.classList.remove("fundo-liso", "fundo-imagem");
+  if (modo !== "linhas") document.body.classList.add("fundo-" + modo);
+  const usaImg = modo === "imagem" && imgSegura(v.fundoImagem);
+  $("#bgImg").style.display = $("#bgShade").style.display = usaImg ? "block" : "none";
+  if (usaImg) {
+    $("#bgImg").style.backgroundImage = 'url("' + v.fundoImagem + '")';
+    $("#bgShade").style.opacity = Math.min(0.9, Math.max(0, (Number(v.escurecer) || 0) / 100));
+  }
+}
+const logoHtml = () => { const u = state.config.visual && state.config.visual.logoUrl; return imgSegura(u) ? '<img class="cover-logo" src="' + u + '" alt="" />' : ""; };
+const etiquetaTxt = () => { const e = state.config.visual && state.config.visual.etiqueta; return e === undefined || e === null ? "Mentoria Viver de Shopee" : e; };
+
+/* ---------- Meta Pixel: só carrega se o ID foi informado no CRM ---------- */
+function startPixel(id) {
+  if (!/^\d{5,20}$/.test(id || "") || window.fbq) return;
+  !function (f, b, e, v, n, t, s) {
+    if (f.fbq) return; n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+    if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = "2.0"; n.queue = [];
+    t = b.createElement(e); t.async = !0; t.src = v; s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s);
+  }(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+  fbq("init", id); fbq("track", "PageView");
+}
+function trackLead() { try { if (typeof fbq === "function") fbq("track", "Lead"); } catch (e) { /* bloqueador de anúncios: não impede o envio */ } }
+
+/* ---------- Telas: perguntas seguidas com o mesmo `grupo` caem na mesma tela ---------- */
+function buildScreens(questions) {
+  const out = [{ type: "intro" }];
+  let i = 0;
+  while (i < questions.length) {
+    const q = questions[i];
+    if (q.grupo) {
+      const group = [q]; let j = i + 1;
+      while (j < questions.length && questions[j].grupo === q.grupo) { group.push(questions[j]); j++; }
+      out.push({ type: "group", title: q.grupo, questions: group });
+      i = j;
+    } else { out.push({ type: "single", questions: [q] }); i++; }
+  }
+  out.push({ type: "final" });
+  return out;
+}
+
+async function loadQuestions() {
+  state.loading = true; state.loadError = false;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/formularios?slug=eq.${encodeURIComponent(FORM_KEY)}&select=config`, { headers: apiHeaders(), cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const rows = await res.json();
+    const cfg = rows[0] && rows[0].config;
+    if (!cfg || !Array.isArray(cfg.perguntas) || !cfg.perguntas.length) throw new Error("formulário vazio");
+    state.config = cfg; state.questions = cfg.perguntas;
+    state.screens = buildScreens(state.questions);
+    applyVisual(cfg.visual);
+    startPixel(cfg.pixelId);
+  } catch (e) {
+    console.warn("[formulário] não foi possível carregar:", e.message);
+    state.loadError = true;
+  }
+  state.loading = false;
+}
+
+/* ---------- Ícones ---------- */
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const ICON_DOT = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>';
+const ICON_BACK = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+const ICON_WARN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+const ICON_ROCKET = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>';
+
+/* ---------- Renderização ---------- */
+function render() {
+  const app = $("#app");
+  if (state.loadError) {
+    $("#progressFill").style.width = "0%";
+    app.innerHTML = `<div class="stage"><div class="step active"><div class="cover">
+      <div class="final-icon">${ICON_WARN.replace('width="16" height="16"', 'width="30" height="30"')}</div>
+      <h1 class="cover-title">Formulário indisponível</h1>
+      <p class="cover-sub">Não conseguimos carregar o formulário agora. Verifique sua conexão e tente de novo em instantes.</p>
+      <button class="btn btn-primary" data-action="reload">Tentar novamente</button></div></div></div>`;
+    const b = $('[data-action="reload"]'); if (b) b.addEventListener("click", boot);
+    return;
+  }
+  const screen = state.screens[state.current];
+  const total = state.screens.length - 2; // sem contar intro/final
+  const answered = Math.max(0, state.current - 1);
+  $("#progressFill").style.width = screen.type === "intro" ? "0%" : screen.type === "final" ? "100%" : `${Math.round((answered / total) * 100)}%`;
+
+  let inner = "";
+  if (screen.type === "intro") inner = renderIntro();
+  else if (screen.type === "final") inner = renderFinal();
+  else inner = renderQuestionScreen(screen);
+
+  app.innerHTML = `<div class="stage"><div class="step active">${inner}</div></div>`;
+  attachHandlers(screen);
+  focusFirstField(screen);
+}
+
+function renderIntro() {
+  const c = state.config;
+  return `<div class="cover">
+    ${logoHtml()}${etiquetaTxt() ? `<div class="cover-eyebrow">${ICON_ROCKET.replace('width="30" height="30"', 'width="14" height="14"')} ${esc(etiquetaTxt())}</div>` : ""}
+    <h1 class="cover-title">${esc(c.titulo || "Preencha o formulário")}</h1>
+    ${c.subtitulo ? `<p class="cover-sub">${esc(c.subtitulo)}</p>` : ""}
+    <button class="btn btn-primary" data-action="start">${esc(c.botao || "Começar")}</button>
+  </div>`;
+}
+
+function renderFinal() {
+  const c = state.config;
+  if (state.submitting) {
+    return `<div class="cover"><div class="final-icon"><div class="spin" style="width:22px;height:22px;border:2.5px solid rgba(238,77,45,.25);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite"></div></div>
+      <h1 class="cover-title">Enviando…</h1><p class="cover-sub">Só um instante.</p></div>`;
+  }
+  if (state.submitError) {
+    return `<div class="cover"><div class="final-icon">${ICON_WARN.replace('width="16" height="16"', 'width="30" height="30"')}</div>
+      <h1 class="cover-title">Não foi possível enviar</h1>
+      <div class="warn-box" role="alert">${ICON_WARN}<span>${esc(state.submitError)}</span></div>
+      <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
+        <button class="btn btn-primary" style="max-width:220px" data-action="retry">Tentar novamente</button>
+        <button class="btn btn-back" style="width:auto;padding:0 18px" data-action="back-to-form">Revisar respostas</button></div></div>`;
+  }
+  return `<div class="cover">
+    ${logoHtml()}
+    <div class="final-icon">${ICON_ROCKET}</div>
+    <h1 class="cover-title">${esc(c.finalTitulo || "Recebemos suas respostas!")}</h1>
+    ${c.finalTexto ? `<p class="cover-sub">${esc(c.finalTexto)}</p>` : ""}
+  </div>`;
+}
+
+function renderQuestionScreen(screen) {
+  const first = screen.questions[0];
+  const title = screen.type === "group" ? screen.title : first.pergunta;
+  const desc = screen.type === "group" ? null : first.descricao;
+  const isLast = state.current === state.screens.length - 2;
+  const body = screen.type === "group" ? renderFieldGroup(screen.questions) : renderQuestionBody(first);
+  const errorList = screen.questions.map(q => state.errors[q.id]).filter(Boolean);
+  const warn = errorList.length
+    ? `<div class="warn-box" role="alert">${ICON_WARN}<div>${errorList.map(m => `<div>${esc(m)}</div>`).join("")}</div></div>` : "";
+  return `
+    <div class="q-head">
+      <h1 class="q-title">${esc(title)}${first.obrigatoria ? '<span class="req">*</span>' : ""}</h1>
+      ${desc ? `<p class="q-desc">${esc(desc)}</p>` : ""}
+    </div>
+    <div class="q-body">${body}${warn}</div>
+    <div class="footer-bar"><div class="footer-inner">
+      ${state.current === 1 ? "" : `<button class="btn btn-back" data-action="back" aria-label="Voltar">${ICON_BACK}</button>`}
+      <button class="btn btn-primary" data-action="next">${isLast ? "Enviar" : "OK"}</button>
+    </div></div>`;
+}
+
+function renderQuestionBody(q) {
+  if (q.tipo === "single_select" || q.tipo === "multi_select") return renderOptions(q);
+  return renderFieldGroup([q]);
+}
+
+function renderOptions(q) {
+  const current = state.answers[q.id];
+  const selected = q.tipo === "multi_select" ? (Array.isArray(current) ? current : []) : (current ? [current] : []);
+  return `<div class="options" role="group" aria-label="${esc(q.pergunta)}">
+    ${(q.opcoes || []).map(o => {
+      const isSel = selected.includes(o.id);
+      return `<button type="button" class="opt ${q.tipo === "single_select" ? "single" : ""} ${isSel ? "sel" : ""}"
+                data-action="toggle-option" data-qid="${esc(q.id)}" data-multi="${q.tipo === "multi_select" ? "1" : "0"}" data-val="${esc(o.id)}"
+                aria-pressed="${isSel}">
+        <span class="mark">${isSel ? (q.tipo === "single_select" ? ICON_DOT : ICON_CHECK) : ""}</span>
+        <span class="lbl">${esc(o.label)}</span>
+      </button>`;
+    }).join("")}
+  </div>`;
+}
+
+function renderFieldGroup(questions) {
+  return `<div class="field-group">
+    ${questions.map(q => {
+      const val = state.answers[q.id] || "";
+      const hasErr = !!state.errors[q.id];
+      const lbl = `<label for="f_${esc(q.id)}">${esc(q.pergunta)}${q.obrigatoria ? '<span class="req">*</span>' : ""}</label>`;
+      if (q.tipo === "phone") {
+        return `<div class="field ${hasErr ? "err" : ""}">${lbl}
+          <div class="phone-row">
+            <span class="phone-code">🇧🇷 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+            <div class="field" style="margin:0"><input id="f_${esc(q.id)}" type="tel" inputmode="tel" data-qid="${esc(q.id)}" data-action="text-input" value="${esc(val)}" placeholder="${esc(q.placeholder || "")}" autocomplete="tel" maxlength="30" /></div>
+          </div></div>`;
+      }
+      if (q.tipo === "long_text") {
+        return `<div class="field ${hasErr ? "err" : ""}">${lbl}
+          <textarea id="f_${esc(q.id)}" rows="4" maxlength="2000" data-qid="${esc(q.id)}" data-action="text-input" placeholder="${esc(q.placeholder || "")}">${esc(val)}</textarea></div>`;
+      }
+      const type = q.tipo === "email" ? "email" : "text";
+      return `<div class="field ${hasErr ? "err" : ""}">${lbl}
+        <input id="f_${esc(q.id)}" type="${type}" data-qid="${esc(q.id)}" data-action="text-input" value="${esc(val)}" placeholder="${esc(q.placeholder || "")}" autocomplete="${type === "email" ? "email" : "off"}" maxlength="300" /></div>`;
+    }).join("")}
+    <div class="hp-field" aria-hidden="true"><label for="empresa_contato_alt">Não preencha este campo</label>
+      <input id="empresa_contato_alt" name="empresa_contato_alt" type="text" tabindex="-1" autocomplete="off" /></div>
+  </div>`;
+}
+
+/* ---------- Eventos ---------- */
+function attachHandlers(screen) {
+  document.querySelectorAll('[data-action="toggle-option"]').forEach(btn => {
+    btn.addEventListener("click", () => {
+      const qid = btn.dataset.qid, val = btn.dataset.val, multi = btn.dataset.multi === "1";
+      if (multi) {
+        const arr = Array.isArray(state.answers[qid]) ? [...state.answers[qid]] : [];
+        const idx = arr.indexOf(val);
+        if (idx >= 0) arr.splice(idx, 1); else arr.push(val);
+        state.answers[qid] = arr;
+      } else state.answers[qid] = val;
+      delete state.errors[qid];
+      render();
+    });
+  });
+  document.querySelectorAll('[data-action="text-input"]').forEach(inp => {
+    inp.addEventListener("input", () => { state.answers[inp.dataset.qid] = inp.value; delete state.errors[inp.dataset.qid]; });
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && inp.tagName !== "TEXTAREA") { e.preventDefault(); goNext(screen); } });
+  });
+  const on = (sel, fn) => { const el = $(sel); if (el) el.addEventListener("click", fn); };
+  on('[data-action="start"]', () => go(state.current + 1));
+  on('[data-action="back"]', () => go(state.current - 1));
+  on('[data-action="next"]', () => goNext(screen));
+  on('[data-action="retry"]', () => submitForm());
+  on('[data-action="back-to-form"]', () => { state.submitError = null; go(state.screens.length - 2); });
+}
+
+function focusFirstField(screen) {
+  if (screen.type === "group" || (screen.type === "single" && ["short_text", "email", "phone", "long_text"].includes(screen.questions[0].tipo))) {
+    const el = document.querySelector(".field input, .field textarea");
+    if (el) setTimeout(() => el.focus(), 320);
+  }
+}
+
+function go(index) {
+  if (index < 0 || index >= state.screens.length) return;
+  state.current = index;
+  render();
+  window.scrollTo(0, 0);
+}
+
+/* ---------- Validação de formato (o servidor valida de novo) ---------- */
+const onlyDigits = (v) => String(v || "").replace(/\D/g, "");
+function isValidEmail(v) {
+  const s = String(v || "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s) && !s.includes("..") && !s.startsWith(".") && !s.endsWith(".");
+}
+function isValidBrPhone(v) {
+  let d = onlyDigits(v);
+  if ((d.length === 12 || d.length === 13) && d.startsWith("55")) d = d.slice(2);
+  if (d.length < 10 || d.length > 11) return false;
+  if (/^(\d)\1+$/.test(d)) return false;
+  const ddd = parseInt(d.slice(0, 2), 10);
+  return ddd >= 11 && ddd <= 99;
+}
+function isValidFreeText(v) {
+  const s = String(v || "").trim();
+  return s.length >= 2 && /[a-zA-ZÀ-ÖØ-öø-ÿ]/.test(s);
+}
+
+function validateScreen(screen) {
+  let ok = true;
+  state.errors = {};
+  for (const q of screen.questions) {
+    const val = state.answers[q.id];
+    if (q.tipo === "multi_select") {
+      if (q.obrigatoria && (!Array.isArray(val) || !val.length)) { state.errors[q.id] = `Por favor, faça uma seleção em "${q.pergunta}".`; ok = false; }
+    } else if (q.tipo === "single_select") {
+      if (q.obrigatoria && !val) { state.errors[q.id] = `Por favor, faça uma seleção em "${q.pergunta}".`; ok = false; }
+    } else {
+      const v = (val || "").trim();
+      if (!v) {
+        if (q.obrigatoria) { state.errors[q.id] = `Preencha "${q.pergunta}".`; ok = false; }
+      } else if (q.tipo === "email" && !isValidEmail(v)) {
+        state.errors[q.id] = `O e-mail em "${q.pergunta}" parece incorreto. Confira se está digitado certo (ex: nome@empresa.com).`; ok = false;
+      } else if (q.tipo === "phone" && !isValidBrPhone(v)) {
+        state.errors[q.id] = `O telefone em "${q.pergunta}" está incompleto ou inválido. Confira o DDD e o número.`; ok = false;
+      } else if ((q.tipo === "short_text" || q.tipo === "long_text") && !isValidFreeText(v)) {
+        state.errors[q.id] = `"${q.pergunta}" parece incompleto. Confira o que foi digitado.`; ok = false;
+      }
+    }
+  }
+  return ok;
+}
+
+function goNext(screen) {
+  if (!validateScreen(screen)) { render(); return; }
+  const isLast = state.current === state.screens.length - 2;
+  if (isLast) { go(state.current + 1); submitForm(); }
+  else go(state.current + 1);
+}
+
+/* ---------- Envio ---------- */
+function buildRespostas() {
+  const respostas = {};
+  state.questions.forEach(q => { if (state.answers[q.id] !== undefined) respostas[q.id] = state.answers[q.id]; });
+  return respostas;
+}
+
+async function submitForm() {
+  if (PREVIEW) { state.submitted = true; render(); return; } // pré-visualização: mostra a tela final sem enviar
+  if (state.submitting || state.submitted) return; // evita envio duplicado
+  state.submitting = true; state.submitError = null; render();
+  const honeypot = document.getElementById("empresa_contato_alt");
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/enviar_formulario`, {
+      method: "POST", headers: { ...apiHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ p_slug: FORM_KEY, p_respostas: buildRespostas(), p_hp: honeypot ? honeypot.value : "", p_origem: ORIGEM || null }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      // P0001 = recusa com mensagem pensada para a pessoa; qualquer outro erro vira texto genérico
+      throw new Error(data && data.code === "P0001" && data.message ? data.message : "Não foi possível enviar agora. Tente novamente em instantes.");
+    }
+    state.submitted = true; state.submitting = false;
+    trackLead();
+  } catch (e) {
+    state.submitting = false;
+    state.submitError = e instanceof TypeError ? "Sem conexão com a internet. Verifique e tente novamente." : e.message;
+  }
+  render();
+}
+
+function iniciarPreview() {
+  const aviso = document.createElement("div");
+  aviso.textContent = "Pré-visualização · nada é enviado";
+  aviso.style.cssText = "position:fixed;left:50%;bottom:6px;transform:translateX(-50%);z-index:60;font:600 11px Inter,sans-serif;color:var(--text-3);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:3px 10px;pointer-events:none";
+  document.body.appendChild(aviso);
+  window.addEventListener("message", (e) => {
+    if (e.source !== window.parent || !e.data || e.data.tipo !== "preview-config") return;
+    const cfg = e.data.config;
+    if (!cfg || !Array.isArray(cfg.perguntas) || !cfg.perguntas.length) return;
+    state.config = cfg; state.questions = cfg.perguntas; state.screens = buildScreens(cfg.perguntas);
+    Object.assign(state, { current: 0, answers: {}, errors: {}, submitted: false, submitError: null, loadError: false, loading: false });
+    applyVisual(cfg.visual);
+    $("#bootLoading").style.display = "none";
+    render();
+  });
+  window.parent.postMessage({ tipo: "preview-pronto" }, "*");
+}
+
+async function boot() {
+  if (PREVIEW) { iniciarPreview(); return; }
+  $("#bootLoading").style.display = "flex";
+  await loadQuestions();
+  $("#bootLoading").style.display = "none";
+  render();
+}
+boot();
+
+  </script>
+</body>
+</html>
