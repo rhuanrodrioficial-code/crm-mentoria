@@ -1856,17 +1856,6 @@ function customPrompt(title, message, placeholder, onSubmit, initial) {
   $("#promptBg").addEventListener("click", (e) => { if (e.target.id === "promptBg") close(); });
 }
 
-function loadDemoDataAction() {
-  customConfirm("Isso substitui os dados atuais por dados fictícios de demonstração (leads, tarefas, agenda, equipe e conversas de exemplo, claramente identificados como tal). Você pode apagar tudo depois em Integrações.", false, () => {
-    const demo = buildDemoData();
-    state.leads = demo.leads; state.convs = demo.convs; state.tasks = demo.tasks; state.eventos = demo.eventos;
-    state.equipe = demo.equipe; state.meta = demo.meta; state.log = []; state.demoMode = true;
-    SYNC_KEYS.forEach(k => k !== "integr" && saveSlice(k));
-    addLogEntry("Dados de demonstração carregados.");
-    toast("Dados de demonstração carregados — claramente marcados como fictícios.");
-    render();
-  });
-}
 function resetAllData() {
   customConfirm("Isso apaga TODOS os dados deste CRM (leads, tarefas, agenda, conversas, equipe, meta, etapas, automação e histórico) para todos que usam este link. Esta ação não pode ser desfeita.", true, () => {
     state.leads = []; state.convs = []; state.tasks = []; state.eventos = []; state.equipe = []; state.meta = 0; state.log = []; state.demoMode = false;
@@ -2098,8 +2087,7 @@ function renderDashboard() {
       <div class="card" style="padding:44px;text-align:center">
         <div style="width:56px;height:56px;border-radius:16px;background:var(--brand-weak);color:var(--brand);display:grid;place-items:center;margin:0 auto 16px">${icon("user-plus", 26)}</div>
         <div style="font-family:var(--font-d);font-weight:700;font-size:16px;margin-bottom:6px">Seu painel vai ganhar vida com o primeiro lead</div>
-        <div style="font-size:13px;color:var(--text-2);margin-bottom:18px">Cadastre um lead em <b>Leads</b> ou <b>Funil de Vendas</b>, ou converta uma conversa do WhatsApp em <b>Atendimento</b>.</div>
-        <button class="btn btn-g" data-action="load-demo">${icon("sparkles", 14)}Ou veja como fica com dados de demonstração</button>
+        <div style="font-size:13px;color:var(--text-2)">Cadastre um lead em <b>Leads</b> ou <b>Funil de Vendas</b>. Quem preencher o <b>Formulário</b> também aparece aqui sozinho.</div>
       </div></div>`;
   }
 
@@ -3930,7 +3918,6 @@ function setupGlobalEvents() {
         break;
       }
       case "download-proposal": { const l = state.leads.find(x => x.id === el.dataset.leadId); if (l) downloadProposal(l); break; }
-      case "load-demo": loadDemoDataAction(); break;
       case "reset-data": resetAllData(); break;
       case "add-membro": { const inp = $("#novoMembroInput"); const n = inp.value.trim(); if (n) { addMembro(n); } break; }
       case "remove-membro": removeMembro(el.dataset.nome); break;

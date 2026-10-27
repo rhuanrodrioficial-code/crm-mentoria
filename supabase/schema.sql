@@ -181,6 +181,7 @@ declare
   v_invest numeric := 0; v_fat numeric := 0; v_valor numeric := 0;
   v_pontos int := 0; v_pri text; v_prob int; v_stage text;
   v_nota text := ''; v_lead_id text; v_reenvio boolean := false; v_dig text;
+  v_stage_ant text; v_mov text := '';
   v_alta int := 9; v_media int := 5;
 begin
   -- Campo-isca escondido: se veio preenchido é robô; finge sucesso e descarta.
@@ -303,6 +304,18 @@ begin
 
   if v_lead_id is not null then
     v_reenvio := true;
+    -- Quem já é lead e preenche de novo volta a andar no funil: etapa e prioridade seguem a nova
+    -- pontuação. Aluno matriculado não é movido (não faz sentido tirar da etapa final).
+    select l.stage into v_stage_ant from public.leads l where l.id = v_lead_id;
+    if v_stage_ant is distinct from 'fechado' then
+      update public.leads set stage = v_stage, pri = v_pri, prob = v_prob where id = v_lead_id;
+      if v_stage_ant is distinct from v_stage then
+        v_mov := ' · Movido no funil: '
+          || coalesce(case when jsonb_typeof(stages) = 'array' then (select s.value->>'nome' from jsonb_array_elements(stages) s where s.value->>'id' = v_stage_ant limit 1) end, v_stage_ant, '?')
+          || ' → '
+          || coalesce(case when jsonb_typeof(stages) = 'array' then (select s.value->>'nome' from jsonb_array_elements(stages) s where s.value->>'id' = v_stage limit 1) end, v_stage);
+      end if;
+    end if;
   else
     v_lead_id := gen_random_uuid()::text;
     insert into public.leads (id, nome, email, wa, tel, ja_vende, nicho, nivel, objetivo, invest, fat_shopee, origem, stage, valor, prob, pri)
@@ -312,7 +325,7 @@ begin
   insert into public.lead_notas (id, lead_id, tipo, titulo, texto, data_evento, autor)
   values (gen_random_uuid()::text, v_lead_id, 'Como começou',
           case when v_reenvio then 'Novo envio do formulário' else 'Respostas do formulário' end,
-          left(btrim(v_nota), 4500) || E'\n\nPontuação: ' || v_pontos::text || ' · Prioridade: ' || v_pri || ' · Origem: ' || v_origem,
+          left(btrim(v_nota), 4500) || E'\n\nPontuação: ' || v_pontos::text || ' · Prioridade: ' || v_pri || ' · Origem: ' || v_origem || v_mov,
           now(), 'Formulário');
 
   insert into public.form_respostas (slug, lead_id, respostas, pontos, prioridade, reenvio)
