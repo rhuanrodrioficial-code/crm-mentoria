@@ -1397,6 +1397,13 @@ async function gcalCriar(ev, op) {
   if (op.meet) corpo.conferenceData = { createRequest: { requestId: (crypto.randomUUID ? crypto.randomUUID() : "r" + Date.now() + Math.random()), conferenceSolutionKey: { type: "hangoutsMeet" } } };
   return gcalApi(`/calendars/${gcalCal()}/events?conferenceDataVersion=1&sendUpdates=${op.convidar && mailOk ? "all" : "none"}`, { method: "POST", body: JSON.stringify(corpo) });
 }
+async function gcalEditar(gid, ev) {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const ini = new Date(`${ev.data}T${ev.hora}:00`), fim = new Date(ini.getTime() + ev.duracao * 60000);
+  return gcalApi(`/calendars/${gcalCal()}/events/${encodeURIComponent(gid)}?sendUpdates=all`, { method: "PATCH", body: JSON.stringify({
+    summary: ev.titulo, location: ev.local || "",
+    start: { dateTime: ini.toISOString(), timeZone: tz }, end: { dateTime: fim.toISOString(), timeZone: tz } }) });
+}
 function gcalItemHtml(i) {
   const dia = !!(i.start && i.start.date);
   const d = new Date(dia ? i.start.date + "T00:00:00" : (i.start && i.start.dateTime));
@@ -1432,6 +1439,10 @@ function gcalCardHtml() {
 }
 // Bloco dentro do modal de compromisso
 function gcalBoxHtml() {
+  const c = ui.modalCtx;
+  if (c && (c.start || c.gcalId)) return gcalConectado()
+    ? `<div class="inline-msg" style="background:var(--brand-weak);color:var(--brand)">${icon("cloud", 14)}Este compromisso está no Google Agenda. As mudanças também serão enviadas para lá.</div><div id="gcalConf" style="font-size:12.5px;color:var(--warn);margin-top:8px"></div>`
+    : `<div class="inline-msg" style="background:var(--warn-weak);color:var(--warn)">${icon("alert-circle", 14)}Google Agenda desconectado: a mudança vale só no CRM e o evento no Google fica como está.</div>`;
   if (!(state.gcal && state.gcal.clientId)) return `<div class="inline-msg" style="background:var(--brand-weak);color:var(--brand)">${icon("cloud", 14)}Ligue o Google Agenda na tela Agenda para criar o compromisso direto nela.</div>`;
   if (!gcalConectado()) return `<button class="btn btn-g" data-action="gcal-modal-connect" style="width:100%;justify-content:center">${icon("cloud", 15)}Conectar Google Agenda</button>`;
   const lead = state.leads.find(l => l.id === (($("#f_lead") || {}).value));
@@ -1453,7 +1464,7 @@ function gcalChecarConflito() {
     const fim = new Date(ini.getTime() + dur * 60000);
     try {
       const d = await gcalApi(`/calendars/${gcalCal()}/events?singleEvents=true&timeMin=${encodeURIComponent(ini.toISOString())}&timeMax=${encodeURIComponent(fim.toISOString())}`);
-      const c = (d.items || []).filter(i => i.status !== "cancelled" && i.transparency !== "transparent" && i.start && i.start.dateTime);
+      const c = (d.items || []).filter(i => i.status !== "cancelled" && i.transparency !== "transparent" && i.start && i.start.dateTime && i.id !== ((ui.modalCtx && (ui.modalCtx.gcalId || (ui.modalCtx.start && ui.modalCtx.id))) || ""));
       const alvo = $("#gcalConf"); if (alvo) alvo.textContent = c.length ? "Atenção: você já tem " + c.map(i => '"' + (i.summary || "sem título") + '"').join(", ") + " nesse horário." : "";
     } catch (e) { /* a checagem é só um aviso; falhar não impede de agendar */ }
   }, 400);
@@ -2350,19 +2361,49 @@ function renderAtendimento() {
 }
 
 /* ---------- Agenda ---------- */
+const AG_BTN = 'class="icon-btn" style="width:30px;height:30px"';
+function agendaLinhaCrm(e, leadName) {
+  const cor = TYPE_COLOR[e.tipo] || "var(--brand)";
+  return `<div class="act-row"><span class="act-time">${esc(e.hora)}</span><span class="act-dot" style="background:${cor}"></span>
+    <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow-wrap:anywhere">${esc(e.titulo)}</div>
+      <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><span class="chip" style="background:${cor}1a;color:${cor}">${esc(e.tipo)}</span>${e.leadId && leadName(e.leadId) ? `<span class="chip" style="background:var(--surface-2);color:var(--text-2)">${esc(leadName(e.leadId))}</span>` : ""}</div></div>
+    <button ${AG_BTN} title="Editar compromisso" data-action="event-edit" data-event-id="${esc(e.id)}">${icon("edit-2", 15)}</button>
+    <button ${AG_BTN} title="Abrir no Google Agenda" data-action="event-gcal" data-event-id="${esc(e.id)}">${icon("external-link", 15)}</button>
+    ${gcalLinkSeguro(e.meet) ? `<a ${AG_BTN} title="Entrar no Google Meet" href="${esc(e.meet)}" target="_blank" rel="noopener noreferrer">${icon("video", 15)}</a>` : ""}
+    <button ${AG_BTN} title="Baixar .ics" data-action="event-ics" data-event-id="${esc(e.id)}">${icon("download", 15)}</button>
+    <button ${AG_BTN} title="Excluir compromisso" data-action="event-delete" data-event-id="${esc(e.id)}">${icon("trash-2", 15)}</button></div>`;
+}
+// Evento que existe só no Google Agenda; dia inteiro não edita aqui (só abrir/excluir)
+function agendaLinhaGoogle(i) {
+  const hr = i.start.dateTime ? new Date(i.start.dateTime).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "Dia todo";
+  const meet = gcalLinkSeguro(i.hangoutLink), abrir = gcalLinkSeguro(i.htmlLink);
+  return `<div class="act-row"><span class="act-time">${esc(hr)}</span><span class="act-dot" style="background:var(--sky)"></span>
+    <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow-wrap:anywhere">${esc(i.summary || "(sem título)")}</div>
+      <div style="margin-top:4px"><span class="chip" style="background:var(--surface-2);color:var(--text-2)">Google Agenda</span></div></div>
+    ${i.start.dateTime ? `<button ${AG_BTN} title="Editar compromisso" data-action="gevent-edit" data-gid="${esc(i.id)}">${icon("edit-2", 15)}</button>` : ""}
+    ${meet ? `<a ${AG_BTN} title="Entrar no Google Meet" href="${esc(meet)}" target="_blank" rel="noopener noreferrer">${icon("video", 15)}</a>` : ""}
+    ${abrir ? `<a ${AG_BTN} title="Abrir no Google Agenda" href="${esc(abrir)}" target="_blank" rel="noopener noreferrer">${icon("external-link", 15)}</a>` : ""}
+    <button ${AG_BTN} title="Excluir do Google Agenda" data-action="gevent-delete" data-gid="${esc(i.id)}">${icon("trash-2", 15)}</button></div>`;
+}
+
 function renderAgenda() {
+  const d0 = new Date(), hojeStr = d0.getFullYear() + "-" + String(d0.getMonth() + 1).padStart(2, "0") + "-" + String(d0.getDate()).padStart(2, "0");
   const eventos = state.eventos;
+  const leadName = (id) => state.leads.find(l => l.id === id)?.nome;
   const dias = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const byDay = {}; eventos.forEach(e => { const d = Number(e.data.split("-")[2]); (byDay[d] = byDay[d] || []).push(e); });
   const externos = gcalExternos(); // eventos que estão só no Google Agenda
-  const prefMes = TODAY_STR.slice(0, 7);
+  const prefMes = hojeStr.slice(0, 7);
   externos.forEach(i => { const ds = gcalDataItem(i); if (ds.startsWith(prefMes)) (byDay[Number(ds.slice(8, 10))] = byDay[Number(ds.slice(8, 10))] || []).push({ tipo: "Google" }); });
-  const hoje = eventos.filter(e => e.data === TODAY_STR).sort((a, b) => a.hora.localeCompare(b.hora));
-  const hojeGoogle = externos.filter(i => gcalDataItem(i) === TODAY_STR);
-  const todayNum = Number(TODAY_STR.split("-")[2]);
-  const daysInMonth = new Date(Number(TODAY_STR.slice(0, 4)), Number(TODAY_STR.slice(5, 7)), 0).getDate();
-  const firstWeekday = new Date(TODAY_STR.slice(0, 7) + "-01").getDay();
-  const leadName = (id) => state.leads.find(l => l.id === id)?.nome;
+  // só os de hoje, em ordem de horário (data local, não UTC: à noite o UTC já é o dia seguinte)
+  const todos = [
+    ...eventos.filter(e => e.data === hojeStr).map(e => ({ h: e.hora || "00:00", html: agendaLinhaCrm(e, leadName) })),
+    ...externos.filter(i => gcalDataItem(i) === hojeStr).map(i => ({ h: i.start.dateTime ? new Date(i.start.dateTime).toTimeString().slice(0, 5) : "00:00", html: agendaLinhaGoogle(i) })),
+  ].sort((a, b) => a.h.localeCompare(b.h));
+  const listaAgenda = todos.length ? todos.map(x => x.html).join("") : `<div style="padding:24px 18px;text-align:center;color:var(--text-3);font-size:13px">Nada agendado para hoje.</div>`;
+  const todayNum = Number(hojeStr.split("-")[2]);
+  const daysInMonth = new Date(Number(hojeStr.slice(0, 4)), Number(hojeStr.slice(5, 7)), 0).getDate();
+  const firstWeekday = new Date(hojeStr.slice(0, 7) + "-01").getDay();
   let cells = "";
   for (let i = 0; i < firstWeekday; i++) cells += `<div></div>`;
   for (let d = 1; d <= daysInMonth; d++) {
@@ -2379,22 +2420,8 @@ function renderAgenda() {
       <div class="card" style="padding:18px"><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
         ${dias.map(d => `<div style="text-align:center;font-size:11px;font-weight:700;color:var(--text-3);padding:4px 0">${d}</div>`).join("")}${cells}
       </div></div>
-      <div class="card"><div class="card-h"><div class="card-t">Compromissos de hoje</div></div>
-        <div style="margin-top:8px">${hojeGoogle.map(i => {
-          const hr = i.start.dateTime ? new Date(i.start.dateTime).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "Dia todo";
-          const meet = gcalLinkSeguro(i.hangoutLink), abrir = gcalLinkSeguro(i.htmlLink);
-          return `<div class="act-row"><span class="act-time">${esc(hr)}</span><span class="act-dot" style="background:var(--sky)"></span>
-            <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow-wrap:anywhere">${esc(i.summary || "(sem título)")}</div>
-              <div style="margin-top:4px"><span class="chip" style="background:var(--surface-2);color:var(--text-2)">Google Agenda</span></div></div>
-            ${meet ? `<a class="icon-btn" style="width:30px;height:30px" title="Entrar no Google Meet" href="${esc(meet)}" target="_blank" rel="noopener noreferrer">${icon("video", 15)}</a>` : ""}
-            ${abrir ? `<a class="icon-btn" style="width:30px;height:30px" title="Abrir no Google Agenda" href="${esc(abrir)}" target="_blank" rel="noopener noreferrer">${icon("external-link", 15)}</a>` : ""}</div>`; }).join("")}${hoje.length === 0 && hojeGoogle.length === 0 ? `<div style="padding:24px 18px;text-align:center;color:var(--text-3);font-size:13px">Nada agendado para hoje.</div>` : hoje.map(e => `
-          <div class="act-row"><span class="act-time">${e.hora}</span><span class="act-dot" style="background:${TYPE_COLOR[e.tipo] || "var(--brand)"}"></span>
-            <div style="flex:1"><div style="font-size:13px;font-weight:500">${esc(e.titulo)}</div>
-              <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><span class="chip" style="background:${TYPE_COLOR[e.tipo] || "var(--brand)"}1a;color:${TYPE_COLOR[e.tipo] || "var(--brand)"}">${esc(e.tipo)}</span>${e.leadId && leadName(e.leadId) ? `<span class="chip" style="background:var(--surface-2);color:var(--text-2)">${esc(leadName(e.leadId))}</span>` : ""}</div></div>
-            <button class="icon-btn" style="width:30px;height:30px" title="Abrir no Google Agenda" data-action="event-gcal" data-event-id="${e.id}">${icon("external-link", 15)}</button>
-            ${gcalLinkSeguro(e.meet) ? `<a class="icon-btn" style="width:30px;height:30px" title="Entrar no Google Meet" href="${esc(e.meet)}" target="_blank" rel="noopener noreferrer">${icon("video", 15)}</a>` : ""}
-            <button class="icon-btn" style="width:30px;height:30px" title="Baixar .ics" data-action="event-ics" data-event-id="${e.id}">${icon("download", 15)}</button>
-            <button class="icon-btn" style="width:30px;height:30px" title="Excluir compromisso" data-action="event-delete" data-event-id="${e.id}">${icon("trash-2", 15)}</button></div>`).join("")}</div></div>
+      <div class="card"><div class="card-h"><div class="card-t">Compromissos de hoje</div><span class="chip" style="background:var(--surface-2);color:var(--text-2)">${todos.length}</span></div>
+        <div style="margin-top:8px;max-height:620px;overflow-y:auto">${listaAgenda}</div></div>
     </div></div>`;
 }
 
@@ -3091,7 +3118,7 @@ function modalWrap(id, title, iconName, bodyHtml, footHtml) {
 function closeModal() { $("#modalRoot").innerHTML = ""; ui.modal = null; ui.modalCtx = null; }
 function openModal(type, ctx) {
   ui.modal = type; ui.modalCtx = ctx || null;
-  const builders = { lead: () => modalNovoLead(false), cliente: () => modalNovoLead(true), "lead-edit": () => modalNovoLead(false, ctx), nota: () => modalNota(ctx), "nota-edit": () => modalNota(null, ctx), tarefa: () => modalNovaTarefa(ctx), "tarefa-edit": () => modalNovaTarefa(null, ctx), compromisso: () => modalCompromisso(), conversa: () => modalNovaConversa(), etapas: () => modalEtapas(), "wa-connect": () => modalWaConnect(), "form-preview": () => modalFormPreview(), "gcal-config": () => modalGcalConfig(), "form-question-new": () => modalFormQuestion(null), "form-question-edit": () => modalFormQuestion(ctx) };
+  const builders = { lead: () => modalNovoLead(false), cliente: () => modalNovoLead(true), "lead-edit": () => modalNovoLead(false, ctx), nota: () => modalNota(ctx), "nota-edit": () => modalNota(null, ctx), tarefa: () => modalNovaTarefa(ctx), "tarefa-edit": () => modalNovaTarefa(null, ctx), compromisso: () => modalCompromisso(), "compromisso-edit": () => modalCompromisso(ctx), conversa: () => modalNovaConversa(), etapas: () => modalEtapas(), "wa-connect": () => modalWaConnect(), "form-preview": () => modalFormPreview(), "gcal-config": () => modalGcalConfig(), "form-question-new": () => modalFormQuestion(null), "form-question-edit": () => modalFormQuestion(ctx) };
   $("#modalRoot").innerHTML = (builders[type] || (() => ""))();
   safeCreateIcons();
   const first = $("#modalBox input, #modalBox select"); if (first) first.focus();
@@ -3460,17 +3487,26 @@ function modalNovaTarefa(lead, edit) {
   return modalWrap("tarefa", edit ? "Editar Tarefa" : "Nova Tarefa", "list-checks", body, foot);
 }
 
-function modalCompromisso() {
+// edit: compromisso do CRM (tem .titulo) ou evento só do Google (tem .start); vazio = novo
+function modalCompromisso(edit) {
   const now = new Date(); const pad = (n) => String(n).padStart(2, "0");
   const todayVal = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-  const body = `<div class="field-l"><label>Título *</label><input id="f_titulo" placeholder="Ex: Reunião de proposta" /></div>
+  const ehGoogle = !!(edit && edit.start);
+  let cur = edit || null;
+  if (ehGoogle) {
+    const ini = new Date(edit.start.dateTime), fim = new Date(edit.end && edit.end.dateTime);
+    cur = { titulo: edit.summary || "", tipo: "", leadId: "", data: gcalDataItem(edit), hora: pad(ini.getHours()) + ":" + pad(ini.getMinutes()), duracao: isNaN(fim) ? 30 : Math.max(5, Math.round((fim - ini) / 60000)), local: edit.location || "" };
+  }
+  const v = (k, padrao) => esc(cur && cur[k] != null ? cur[k] : padrao);
+  const oculto = ehGoogle ? 'style="display:none"' : ""; // evento do Google não tem tipo nem lead
+  const body = `<div class="field-l"><label>Título *</label><input id="f_titulo" value="${v("titulo", "")}" placeholder="Ex: Reunião de proposta" /></div>
     <div class="modal-f two">
-      <div class="field-l"><label>Tipo</label><select id="f_tipo">${["Reunião", "Ligação", "Follow-up", "Tarefa"].map(t => `<option>${t}</option>`).join("")}</select></div>
-      <div class="field-l"><label>Vincular a um Lead</label><select id="f_lead"><option value="">Nenhum</option>${state.leads.map(l => `<option value="${l.id}">${esc(l.nome)}</option>`).join("")}</select></div>
-      <div class="field-l"><label>Data</label><input id="f_data" type="date" value="${todayVal}" /></div>
-      <div class="field-l"><label>Hora</label><input id="f_hora" type="time" value="10:00" /></div>
-      <div class="field-l"><label>Duração (min)</label><input id="f_dur" type="number" value="30" /></div>
-      <div class="field-l"><label>Local</label><input id="f_local" placeholder="Ex: Escritório, Google Meet..." /></div>
+      <div class="field-l" ${oculto}><label>Tipo</label><select id="f_tipo">${["Reunião", "Ligação", "Follow-up", "Tarefa"].map(t => `<option ${cur && cur.tipo === t ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+      <div class="field-l" ${oculto}><label>Vincular a um Lead</label><select id="f_lead"><option value="">Nenhum</option>${state.leads.map(l => `<option value="${l.id}" ${cur && cur.leadId === l.id ? "selected" : ""}>${esc(l.nome)}</option>`).join("")}</select></div>
+      <div class="field-l"><label>Data</label><input id="f_data" type="date" value="${v("data", todayVal)}" /></div>
+      <div class="field-l"><label>Hora</label><input id="f_hora" type="time" value="${v("hora", "10:00")}" /></div>
+      <div class="field-l"><label>Duração (min)</label><input id="f_dur" type="number" value="${v("duracao", 30)}" /></div>
+      <div class="field-l"><label>Local</label><input id="f_local" value="${v("local", "")}" placeholder="Ex: Escritório, Google Meet..." /></div>
     </div>
     <div id="gcalBox" style="margin-top:4px">${gcalBoxHtml()}</div>`;
   const foot = `<button class="btn btn-g" id="btnIcs">${icon("download", 14)}.ics</button><button class="btn btn-g" id="btnGcal">${icon("external-link", 14)}Google Agenda</button><button class="btn btn-p" id="btnSalvarEvento">${icon("check", 15)}Salvar</button>`;
@@ -3490,6 +3526,25 @@ function modalCompromisso() {
       const t = $("#f_titulo").value.trim(); if (!t) { toast("Digite um título."); return; }
       const ev = { id: "e_" + Date.now() + Math.random(), titulo: t, tipo: $("#f_tipo").value, data: $("#f_data").value, hora: $("#f_hora").value, duracao: Number($("#f_dur").value) || 30, leadId: $("#f_lead").value || null, local: $("#f_local").value };
       if (!ev.data || !ev.hora) { toast("Informe data e hora."); return; }
+      if (edit) {
+        const novo = ehGoogle ? { ...ev, id: edit.id } : { ...edit, titulo: ev.titulo, tipo: ev.tipo, data: ev.data, hora: ev.hora, duracao: ev.duracao, leadId: ev.leadId, local: ev.local };
+        const gid = ehGoogle ? edit.id : edit.gcalId;
+        const btn = $("#btnSalvarEvento"); btn.disabled = true;
+        try {
+          if (gid && gcalConectado()) await gcalEditar(gid, novo);
+          else if (gid) toast("Google Agenda desconectado: a mudança vale só no CRM.");
+          else if (gcalConectado() && $("#gSalvar") && $("#gSalvar").checked) {
+            const r = await gcalCriar(novo, { meet: $("#gMeet").checked, convidar: $("#gConvidar").checked });
+            novo.gcalId = r.id; novo.gcalLink = gcalLinkSeguro(r.htmlLink); novo.meet = gcalLinkSeguro(r.hangoutLink);
+          }
+        } catch (e) { btn.disabled = false; toast("Google Agenda: " + e.message + ". Nada foi alterado."); return; }
+        if (!ehGoogle) {
+          state.eventos = state.eventos.map(x => x.id === edit.id ? novo : x); saveSlice("eventos");
+          addLogEntry(`Compromisso "${novo.titulo}" editado`, novo.leadId);
+        }
+        closeModal(); toast("Compromisso atualizado."); render(); gcalAtualizar();
+        return;
+      }
       if (gcalConectado() && $("#gSalvar") && $("#gSalvar").checked) {
         const btn = $("#btnSalvarEvento"); btn.disabled = true;
         try {
@@ -3502,7 +3557,7 @@ function modalCompromisso() {
       if (ev.gcalId) gcalAtualizar();
     });
   }, 0);
-  return modalWrap("compromisso", "Novo Compromisso", "calendar-days", body, foot);
+  return modalWrap("compromisso", edit ? "Editar Compromisso" : "Novo Compromisso", "calendar-days", body, foot);
 }
 
 function modalNovaConversa() {
@@ -3928,6 +3983,18 @@ function setupGlobalEvents() {
       case "start-video-call": startVideoCall(ui.atendimentoSel); break;
       case "csv-import-trigger": $("#csvFileInput").click(); break;
       case "csv-export": doCsvExport(); break;
+      case "event-edit": { const ev = state.eventos.find(x => x.id === el.dataset.eventId); if (ev) openModal("compromisso-edit", ev); break; }
+      case "gevent-edit": { const i = ((ui.gcal && ui.gcal.lista) || []).find(x => x.id === el.dataset.gid); if (i) openModal("compromisso-edit", i); break; }
+      case "gevent-delete": {
+        const i = ((ui.gcal && ui.gcal.lista) || []).find(x => x.id === el.dataset.gid); if (!i) break;
+        customConfirm(`Excluir "${i.summary || "(sem título)"}" do Google Agenda? Quem foi convidado recebe o aviso de cancelamento.`, true, async () => {
+          try { await gcalApi(`/calendars/${gcalCal()}/events/${encodeURIComponent(i.id)}?sendUpdates=all`, { method: "DELETE" }); }
+          catch (e) { if (!/not found|deleted|gone/i.test(e.message)) { toast("Não foi possível apagar no Google: " + e.message); return; } }
+          if (ui.gcal && ui.gcal.lista) ui.gcal.lista = ui.gcal.lista.filter(x => x.id !== i.id);
+          toast("Compromisso excluído."); render(); gcalAtualizar();
+        });
+        break;
+      }
       case "event-ics": { const ev = state.eventos.find(x => x.id === el.dataset.eventId); if (ev) downloadIcs(eventoToIcs(ev)); break; }
       case "event-gcal": { const ev = state.eventos.find(x => x.id === el.dataset.eventId); if (ev) openExternal(gcalLinkSeguro(ev.gcalLink) || googleCalendarUrl(eventoToIcs(ev))); break; }
       case "event-delete": {
