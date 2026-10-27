@@ -1380,7 +1380,7 @@ async function gcalAtualizar() {
     ui.gcal.lista = (d.items || []).filter(i => i.status !== "cancelled"); ui.gcal.erro = ""; ui.gcal.ultimo = Date.now();
   } catch (e) { if (ui.gcal) ui.gcal.erro = e.message; else toast("A sessão do Google expirou. Conecte de novo."); }
   if (ui.gcal) ui.gcal.carregando = false;
-  if (ui.view === "agenda" && !ui.modal) render();
+  if ((ui.view === "agenda" || ui.view === "dashboard") && !ui.modal) render();
 }
 async function gcalCriar(ev, op) {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -2092,7 +2092,7 @@ function renderDashboard() {
     const meus = leads.filter(l => l.resp === nome);
     return { nome, receita: meus.filter(l => l.stage === "fechado").reduce((a, l) => a + l.valor, 0), qtd: meus.length };
   }).sort((a, b) => b.receita - a.receita || b.qtd - a.qtd);
-  const hoje = eventos.filter(e => e.data === TODAY_STR).sort((a, b) => a.hora.localeCompare(b.hora));
+  const hoje = agendaHojeLista();
   const metaPct = meta > 0 ? Math.min(100, Math.round(receitaMensal / meta * 100)) : 0;
 
   const kpi = (i, cor, label, value) => `<div class="kpi"><div class="kpi-top"><div class="kpi-ic" style="background:${cor}1f;color:${cor}">${icon(i, 18)}</div></div><div class="kpi-lbl">${label}</div><div class="kpi-val">${value}</div></div>`;
@@ -2138,8 +2138,8 @@ function renderDashboard() {
           <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;font-size:13px"><span style="font-weight:600">${esc(r.nome)}</span><span class="mono" style="color:var(--ok);font-weight:700">${brlk(r.receita)}</span></div>
           <div class="bar-track"><div class="bar-fill" style="width:${Math.round(r.receita / Math.max(1, ranking[0].receita) * 100)}%;background:linear-gradient(90deg,var(--brand),var(--violet))"></div></div></div></div>`).join("")}</div>`}</div>
       <div class="card"><div class="card-h"><div class="card-t">Agenda de Hoje</div>${icon("calendar-days", 16)}</div>
-        ${hoje.length === 0 ? `<div style="padding:24px;text-align:center;font-size:12.5px;color:var(--text-3)">Nada agendado para hoje.</div>` : `<div style="margin-top:8px">${hoje.map(e => `<div class="act-row"><span class="act-time">${e.hora}</span><span class="act-dot" style="background:${TYPE_COLOR[e.tipo] || "var(--brand)"}"></span>
-          <div><div style="font-size:13px;font-weight:500;line-height:1.3">${esc(e.titulo)}</div><span class="chip" style="margin-top:4px;background:${TYPE_COLOR[e.tipo] || "var(--brand)"}1a;color:${TYPE_COLOR[e.tipo] || "var(--brand)"}">${esc(e.tipo)}</span></div></div>`).join("")}</div>`}</div>
+        ${hoje.length === 0 ? `<div style="padding:24px;text-align:center;font-size:12.5px;color:var(--text-3)">Nada agendado para hoje.</div>` : `<div style="margin-top:8px">${hoje.map(e => `<div class="act-row"><span class="act-time">${esc(e.hora)}</span><span class="act-dot" style="background:${e.cor}"></span>
+          <div><div style="font-size:13px;font-weight:500;line-height:1.3">${esc(e.titulo)}</div><span class="chip" style="margin-top:4px;background:var(--surface-2);color:var(--text-2)">${esc(e.tipo)}</span></div></div>`).join("")}</div>`}</div>
     </div>
     <div class="card"><div class="card-h"><div class="card-t">Funil de Vendas — Visão Geral</div></div>
       <div style="padding:18px 14px 10px">${barChartV(funnelCounts)}</div></div>
@@ -2361,6 +2361,16 @@ function renderAtendimento() {
 }
 
 /* ---------- Agenda ---------- */
+// Data local de hoje (aaaa-mm-dd); o TODAY_STR é UTC e vira o dia seguinte à noite
+function hojeLocalStr() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+// Compromissos de hoje do CRM + os que estão só no Google, em ordem de horário (usado no Painel)
+function agendaHojeLista() {
+  const h = hojeLocalStr();
+  return [
+    ...state.eventos.filter(e => e.data === h).map(e => ({ hora: e.hora || "00:00", titulo: e.titulo, tipo: e.tipo, cor: TYPE_COLOR[e.tipo] || "var(--brand)" })),
+    ...gcalExternos().filter(i => gcalDataItem(i) === h).map(i => ({ hora: i.start.dateTime ? new Date(i.start.dateTime).toTimeString().slice(0, 5) : "Dia todo", titulo: i.summary || "(sem título)", tipo: "Google Agenda", cor: "var(--sky)" })),
+  ].sort((a, b) => (a.hora === "Dia todo" ? "00:00" : a.hora).localeCompare(b.hora === "Dia todo" ? "00:00" : b.hora));
+}
 const AG_BTN = 'class="icon-btn" style="width:30px;height:30px"';
 function agendaLinhaCrm(e, leadName) {
   const cor = TYPE_COLOR[e.tipo] || "var(--brand)";
