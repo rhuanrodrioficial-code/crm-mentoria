@@ -7,9 +7,13 @@ CRM de vendas para a mentoria **Viver de Shopee**. A equipe comercial acompanha 
 - **Front-end:** um único arquivo, `index.html` (HTML + CSS + JS puro, sem build, sem framework, sem npm). Abre direto no navegador.
 - **Banco e login:** Supabase (Postgres + Auth + Realtime), acessado direto do navegador com `@supabase/supabase-js@2.45.4` (CDN jsDelivr, com SRI).
 - **CSV:** PapaParse 5.4.1 (cdnjs, com SRI) para importar e exportar leads.
-- **Google Agenda:** script Google Identity Services (`accounts.google.com/gsi/client`, carregado sob demanda, sem SRI pois o Google não permite) + Calendar API v3 direto do navegador. `state.gcal` guarda só `clientId` e `calendarId` (públicos, no `kv`); o token OAuth fica só em `ui.gcal` (memória, reconectar ao recarregar). Escopo `calendar.events`. Uma agenda só; quem usa precisa conectar uma conta Google com acesso a ela.
+- **Google Agenda:** script Google Identity Services (`accounts.google.com/gsi/client`, carregado sob demanda, sem SRI pois o Google não permite) + Calendar API v3 direto do navegador. `state.gcal` guarda só `clientId` e `calendarId` (públicos, no `kv`). Escopo `calendar.events`. Uma agenda só, **uma conexão para a equipe toda** (conta `publicdigital.lucianonunes@gmail.com`).
+  - **Conexão fixa:** o login usa `initCodeClient` (popup); o `code` vai para a função `netlify/functions/gcal.js`, que troca por token de renovação e o guarda na tabela `gcal_conexao` (RLS sem política: só a função, com a `service_role`, lê). O navegador pede acesso novo à função (`gcalServidor("token")`, sem popup) ao abrir e a cada ~1 h; o acesso (1 h) fica só em `ui.gcal` (memória). A função confere o login Supabase do chamador em toda chamada. Ações: `conectar`, `token`, `desconectar`.
+  - **Variáveis no Netlify** (nunca no código): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`. Mudou variável → novo deploy. O `GOOGLE_CLIENT_ID` do Netlify tem de ser o mesmo salvo no CRM (Agenda → Configurar).
+  - **Google Cloud:** o app OAuth precisa estar **Em produção** (Público-alvo); em "Testando" o token de renovação morre em 7 dias. Origem autorizada: `https://crm.publicacademy.com.br`; sem URI de redirecionamento (popup usa `postmessage`).
+  - **Na tela:** eventos do Google que não foram criados pelo CRM aparecem no calendário mensal, em "Compromissos de hoje" (Agenda) e em "Agenda de Hoje" (Painel), via `gcalExternos()`/`agendaHojeLista()`. Compromissos do CRM e do Google têm editar e excluir (`gcalEditar` faz PATCH; excluir faz DELETE). "Hoje" usa data local (`hojeLocalStr()`), não o `TODAY_STR` (UTC).
 - **Fontes:** Google Fonts (Plus Jakarta Sans, Inter, JetBrains Mono). Ícones são SVGs inline no objeto `ICONS` (sem biblioteca externa).
-- **Hospedagem:** Netlify (site estático). DNS no Registro.br, subdomínio `crm.publicacademy.com.br` via CNAME.
+- **Hospedagem:** Netlify (projeto `crmpublicacademy`, site estático + funções). DNS no Registro.br, subdomínio `crm.publicacademy.com.br` via CNAME. **O deploy é manual, arrastando uma pasta em Deploys** (o site NÃO está ligado ao GitHub: `git push` não publica). Arraste uma pasta limpa só com `index.html`, `formulario.html`, `netlify.toml` e `netlify/` (nunca a pasta do projeto inteira: leva `supabase/` e `.claude/`); pasta, não zip, senão as funções não sobem. Existe um site sobrando `eloquent-churros-c8d3f7` (criado ao tentar ligar o GitHub), pode ser excluído.
 - **Repositório:** https://github.com/rhuanrodrioficial-code/crm-mentoria (privado, branch `main`).
 - **Projeto Supabase:** `https://wwtwcstvbcybawhodhob.supabase.co`. A anon key está no `index.html` (`SUPABASE_ANON_KEY`); é pública por desenho e protegida por RLS. **Nunca** colocar a `service_role` no código.
 
@@ -21,8 +25,9 @@ CRM Mentorados/
 ├── formulario.html       # formulário público que o cliente preenche (página separada, sem login)
 ├── netlify.toml          # reescritas: /formulario e /formulario-imagem -> função
 ├── netlify/functions/formulario.js  # serve o link limpo /formulario com o cartão de compartilhamento (og:tags)
+├── netlify/functions/gcal.js        # mantém o Google Agenda conectado (token de renovação no servidor)
 ├── supabase/
-│   └── schema.sql        # tabelas, RLS, triggers e realtime (idempotente)
+│   └── schema.sql        # tabelas (leads, kv, lead_notas, formularios, gcal_conexao...), RLS, triggers e realtime (idempotente)
 ├── CLAUDE.md             # este arquivo
 ├── .gitignore            # ignora .claude/
 └── .claude/skills/       # skills instaladas (não vão para o git)
