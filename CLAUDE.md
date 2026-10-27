@@ -85,7 +85,9 @@ Dentro do `index.html`, em ordem: CSS (variáveis de tema, layout, componentes, 
 
 ## Módulos (menu)
 
-Painel · Atendimento (WhatsApp) · Automação · Funil de Vendas (kanban com arrastar e soltar) · Leads (tabela, busca, importar/exportar CSV) · Clientes (alunos) · Formulário (construtor + respostas) · Agenda · Tarefas · Relatórios · Usuários · Briefing do Sistema · Integrações.
+Painel · Atendimento (WhatsApp) · Automação · Funil de Vendas (kanban com arrastar e soltar) · Leads (tabela, busca, importar/exportar CSV) · Clientes (alunos) · Formulário (construtor + respostas) · Agenda · Tarefas · Relatórios · Usuários · Guia do CRM (aba de ajuda em linguagem simples para quem nunca usou; chave interna `briefing`, função `renderBriefing`).
+
+A tela técnica **Integrações** (e o botão de apagar todos os dados) foi removida da interface de propósito: o usuário final não deve ver jargão. O estado `state.integr` e as ações `integr-*`, `load-demo` e `reset-data` continuam no código sem tela; os dados de demonstração só aparecem no atalho do Painel vazio.
 
 Lead tem painel lateral (drawer) com abas Dados, Comercial, Histórico, Anotações e Tarefas, ações de WhatsApp/ligação/e-mail/proposta e **editar/excluir**. Tarefas também podem ser editadas e excluídas.
 

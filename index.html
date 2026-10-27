@@ -474,9 +474,8 @@ table.crm{width:100%;border-collapse:collapse;font-size:13px;min-width:840px}
       <button class="nav-i" data-view="tarefas"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;flex-shrink:0"><line x1="9" y1="6" x2="20" y2="6"/><polyline points="3 6 4 7 6 5"/><line x1="9" y1="12" x2="20" y2="12"/><polyline points="3 12 4 13 6 11"/><line x1="9" y1="18" x2="20" y2="18"/><polyline points="3 18 4 19 6 17"/></svg><span>Tarefas</span></button>
       <button class="nav-i" data-view="relatorios"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg><span>Relatórios</span></button>
       <button class="nav-i" data-view="usuarios"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M20 13c0 5-3.5 7.5-7.35 8.95a1 1 0 0 1-1.3 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg><span>Usuários</span></button>
-      <div class="nav-lbl">Sistema</div>
-      <button class="nav-i" data-view="briefing"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg><span>Briefing do Sistema</span></button>
-      <button class="nav-i" data-view="integracoes"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg><span>Integrações</span></button>
+      <div class="nav-lbl">Ajuda</div>
+      <button class="nav-i" data-view="briefing"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;flex-shrink:0"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg><span>Guia do CRM</span></button>
     </nav>
     <div class="side-foot">
       <button class="userchip" id="userChipBtn"><div class="ava" id="userChipAva" style="width:34px;height:34px;display:grid;place-items:center;border-radius:50%;color:#fff;font-weight:700;font-family:var(--font-d);font-size:12px"></div>
@@ -1884,7 +1883,7 @@ function downloadProposal(lead) {
 }
 
 /* ============================== RENDERIZAÇÃO ============================== */
-const NAV_LABELS = { dashboard: "Painel", atendimento: "Atendimento", automacao: "Automação", funil: "Funil de Vendas", leads: "Leads", clientes: "Clientes", agenda: "Agenda", tarefas: "Tarefas", relatorios: "Relatórios", usuarios: "Usuários", briefing: "Briefing do Sistema", integracoes: "Integrações", formulario: "Formulário" };
+const NAV_LABELS = { dashboard: "Painel", atendimento: "Atendimento", automacao: "Automação", funil: "Funil de Vendas", leads: "Leads", clientes: "Clientes", agenda: "Agenda", tarefas: "Tarefas", relatorios: "Relatórios", usuarios: "Usuários", briefing: "Guia do CRM", formulario: "Formulário" };
 
 function setView(v) {
   ui.view = v; ui.mobileOpen = false; render(); window.scrollTo(0, 0);
@@ -2011,7 +2010,7 @@ function render() {
     renderSidebar();
     renderHeader();
     const viewRoot = $("#viewRoot");
-    const fns = { dashboard: renderDashboard, atendimento: renderAtendimento, funil: renderFunil, leads: renderLeadsView, clientes: renderClientes, formulario: renderFormulario, agenda: renderAgenda, tarefas: renderTarefas, relatorios: renderRelatorios, usuarios: renderUsuarios, integracoes: renderIntegracoes, briefing: renderBriefing, automacao: renderAutomacao };
+    const fns = { dashboard: renderDashboard, atendimento: renderAtendimento, funil: renderFunil, leads: renderLeadsView, clientes: renderClientes, formulario: renderFormulario, agenda: renderAgenda, tarefas: renderTarefas, relatorios: renderRelatorios, usuarios: renderUsuarios, briefing: renderBriefing, automacao: renderAutomacao };
     viewRoot.style.overflowY = ui.view === "atendimento" ? "hidden" : "auto";
     viewRoot.innerHTML = (fns[ui.view] || renderDashboard)();
     renderDrawer();
@@ -2553,7 +2552,7 @@ function renderAutomacao() {
     <div class="card" style="padding:18px;margin-bottom:16px;border-color:var(--brand)">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">${icon("zap", 17)}<div style="font-weight:700;font-family:var(--font-d)">Como funciona</div></div>
       <div style="font-size:13px;color:var(--text-2);line-height:1.7">Crie regras abaixo: quando uma mensagem do cliente bater com o gatilho escolhido, o CRM responde sozinho — e pode também <b>mover o lead para uma etapa do funil</b> e/ou <b>avisar a equipe</b> que um humano precisa assumir. Pra ver funcionando agora: abra uma conversa em <b>Atendimento</b> e toque em <b>"Simular mensagem do cliente"</b>.</div>
-      <div class="inline-msg" style="background:var(--warn-weak);color:var(--warn);margin-top:10px">${icon("alert-circle", 14)}Isso responde automaticamente aqui no CRM. Pra responder sozinho pelo WhatsApp de verdade, mesmo com ninguém olhando, essas mesmas regras precisam existir também no backend (ver Briefing → seção de automação).</div>
+      <div class="inline-msg" style="background:var(--warn-weak);color:var(--warn);margin-top:10px">${icon("alert-circle", 14)}As respostas automáticas funcionam dentro do CRM, enquanto ele estiver aberto em algum computador.</div>
       <div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="flex:1;font-size:12.5px;color:var(--text-2)">Notificações do navegador (som + aviso) quando um cliente pede atendente: <b>${notifPerm === "granted" ? "ativadas" : notifPerm === "denied" ? "bloqueadas pelo navegador" : "não ativadas"}</b></div>
         ${notifPerm !== "granted" && notifPerm !== "unsupported" ? `<button class="btn btn-g" data-action="ask-notification-permission">${icon("alert-circle", 14)}Ativar notificações</button>` : ""}
@@ -2605,24 +2604,6 @@ function renderAutomacao() {
   </div>`;
 }
 
-function integrCard(id, cfg, fields, docsHtml) {
-  const conectado = cfg.mode === "conectado";
-  return `<div class="card" style="padding:0;overflow:hidden" data-integr-card="${id}">
-    <div style="padding:18px;display:flex;align-items:center;gap:13px;cursor:pointer" data-action="toggle-integr-card" data-card="${id}">
-      <div style="width:42px;height:42px;border-radius:11px;background:${conectado ? "var(--ok-weak)" : "var(--surface-2)"};color:${conectado ? "var(--ok)" : "var(--text-3)"};display:grid;place-items:center;flex-shrink:0">${icon(conectado ? "shield-check" : "plug", 20)}</div>
-      <div style="flex:1;min-width:0"><div style="font-weight:700;font-family:var(--font-d);font-size:14.5px">${cfg.label}</div><div style="font-size:12px;color:var(--text-3)">${conectado ? "Conectado ao seu backend" : "Modo simulação — nenhuma chamada externa"}</div></div>
-      <span class="badge" style="background:${conectado ? "var(--ok-weak)" : "var(--warn-weak)"};color:${conectado ? "var(--ok)" : "var(--warn)"}">${conectado ? "Ativo" : "Simulado"}</span>
-      ${icon("chevron-down", 17)}</div>
-    <div class="integr-card-body" style="display:${ui.openIntegrCard === id ? "block" : "none"};padding:0 18px 18px;border-top:1px solid var(--border)">
-      <div style="display:flex;gap:8px;margin:16px 0 14px"><div class="seg">
-        <button class="${(ui.integrDraft?.[id]?.mode || cfg.mode) === "simulado" ? "on" : ""}" data-action="integr-mode" data-id="${id}" data-mode="simulado">Simulado</button>
-        <button class="${(ui.integrDraft?.[id]?.mode || cfg.mode) === "conectado" ? "on" : ""}" data-action="integr-mode" data-id="${id}" data-mode="conectado">Conectado</button></div></div>
-      ${(ui.integrDraft?.[id]?.mode || cfg.mode) === "conectado" ? `<div style="display:grid;gap:11px;margin-bottom:14px">${fields.map(f => `<div><label style="font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px">${f.label}</label>
-        <input data-action="integr-field" data-id="${id}" data-key="${f.key}" value="${esc((ui.integrDraft?.[id] && ui.integrDraft[id][f.key]) || cfg[f.key] || "")}" placeholder="${f.placeholder}" style="width:100%;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);font-size:13px;outline:none" /></div>`).join("")}</div>` : ""}
-      ${docsHtml ? `<div style="background:var(--surface-2);border-radius:10px;padding:13px;margin-bottom:14px;font-size:12px;color:var(--text-2);line-height:1.6"><div style="display:flex;align-items:center;gap:6px;font-weight:700;color:var(--text);margin-bottom:6px">${icon("code-2", 14)}Contrato esperado do backend</div>${docsHtml}</div>` : ""}
-      <button class="btn btn-p" data-action="integr-save" data-id="${id}">${icon("check", 14)}Salvar configuração</button>
-    </div></div>`;
-}
 /* ---------- Formulário público (construtor + respostas recebidas) ----------
    A página que o cliente preenche é o formulario.html. As perguntas ficam na tabela
    `formularios` (um JSON só) e cada envio vira lead pela função enviar_formulario(),
@@ -3043,33 +3024,7 @@ function renderQuestionCard(q, i, total) {
 }
 
 
-function renderIntegracoes() {
-  const integr = state.integr;
-  const code = (s) => `<code style="background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:var(--font-m);font-size:11.5px">${s}</code>`;
-  return `<div class="page"><div class="page-head"><div><div class="page-title display">Integrações</div><div class="page-sub">Conecte o CRM a serviços externos através do seu backend</div></div></div>
-    <div class="card" style="padding:18px;margin-bottom:16px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">${icon("cloud", 17)}<div style="font-weight:700;font-family:var(--font-d)">Sincronização entre dispositivos</div>
-      <span class="badge" style="margin-left:auto;background:${syncState === "on" ? "var(--ok-weak)" : "var(--warn-weak)"};color:${syncState === "on" ? "var(--ok)" : "var(--warn)"}">${syncState === "on" ? "Ativa" : syncState === "connecting" ? "Conectando" : "Indisponível"}</span></div>
-      <div style="font-size:13px;color:var(--text-2);line-height:1.7">Este CRM sincroniza automaticamente em tempo real — sem nenhuma configuração necessária. Qualquer pessoa que abrir este mesmo arquivo (ou o link para ele) em qualquer dispositivo ou navegador vê e edita os mesmos dados instantaneamente. Não é preciso publicar nada nem configurar bancos de dados manualmente.</div></div>
-    <div style="padding:16px;background:var(--brand-weak);border-radius:13px;margin-bottom:18px;display:flex;gap:13px">${icon("webhook", 20)}<div style="font-size:13px;color:var(--text);line-height:1.6">
-      <b>Como isso funciona:</b> nenhuma tela do CRM fala diretamente com WhatsApp, Google ou qualquer serviço externo — por segurança, tudo passa por um backend que guarda as credenciais. Publique o pacote <b>backend-starter</b> (Render, Railway, VPS, Hostinger...), preencha a URL abaixo e mude o modo para <b>Conectado</b>.</div></div>
-    <div style="display:grid;gap:12px">
-      ${integrCard("whatsapp", integr.whatsapp, [{ key: "backendUrl", label: "URL do servidor do WhatsApp", placeholder: "https://seu-servidor.exemplo.com" }, { key: "phoneNumberId", label: "Phone Number ID (só Cloud API oficial)", placeholder: "opcional" }], `Conexão por <b>QR Code</b> na aba Atendimento (botão “Conectar”). O servidor companheiro expõe ${code("GET /status")}, ${code("POST /send")} e ${code("POST /logout")}.`)}
-      ${integrCard("cnpj", integr.cnpj, [{ key: "backendUrl", label: "URL do backend", placeholder: "https://seu-backend.exemplo.com" }], `Endpoint usado: ${code("GET /api/cnpj/:numero")}.`)}
-      ${integrCard("n8n", integr.n8n, [{ key: "webhookUrl", label: "Webhook URL do n8n", placeholder: "https://seu-n8n.exemplo.com/webhook/crm" }], `Envia POST com JSON { evento, dados } a cada mudança relevante.`)}
-      ${integrCard("googleCalendar", integr.googleCalendar, [], `Já ligado na tela Agenda (botão Configurar), direto do navegador.`)}
-      ${integrCard("gmail", integr.gmail, [{ key: "backendUrl", label: "URL do backend (OAuth Google)", placeholder: "https://seu-backend.exemplo.com" }], `Mesmo backend OAuth do Google Calendar.`)}
-      ${integrCard("outlook", integr.outlook, [{ key: "backendUrl", label: "URL do backend (OAuth Microsoft)", placeholder: "https://seu-backend.exemplo.com" }], `Requer app registrado no Azure AD / Microsoft Graph.`)}
-      ${integrCard("webhooksApi", integr.webhooksApi, [{ key: "backendUrl", label: "URL base da sua API REST", placeholder: "https://seu-backend.exemplo.com" }], `Qualquer sistema externo pode consumir/alimentar o CRM por aqui.`)}
-    </div>
-    <div class="card" style="padding:18px;margin:16px 0"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">${icon("sparkles", 17)}<div style="font-weight:700;font-family:var(--font-d)">Dados de Demonstração</div>${state.demoMode ? `<span class="badge" style="margin-left:auto;background:var(--warn-weak);color:var(--warn)">${icon("alert-circle", 13)}Ativo agora</span>` : ""}</div>
-      <div style="font-size:13px;color:var(--text-2);line-height:1.7;margin-bottom:12px">Popula o CRM com leads, tarefas, agenda, equipe e conversas <b>fictícios</b>, úteis para uma apresentação. Isso <b>substitui</b> os dados atuais.</div>
-      <button class="btn btn-g" data-action="load-demo">${icon("sparkles", 14)}Carregar dados de demonstração</button></div>
-    <div class="card" style="padding:18px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">${icon("trash-2", 17)}<div style="font-weight:700;font-family:var(--font-d)">Dados deste CRM</div></div>
-      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:12px;line-height:1.6">Leads, conversas, tarefas e agenda ficam sincronizados em tempo real entre todos os dispositivos. Use o botão abaixo para apagar tudo e recomeçar do zero.</div>
-      <button class="btn btn-g" style="color:var(--bad)" data-action="reset-data">${icon("trash-2", 14)}Apagar todos os dados</button></div></div>`;
-}
-
-/* ---------- Briefing do Sistema ---------- */
+/* ---------- Guia do CRM (para quem nunca usou) ---------- */
 function guideSection(id, title, iconName, bodyHtml, defaultOpen) {
   const open = ui.openGuide === id || (defaultOpen && ui.openGuide === undefined);
   return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
@@ -3081,55 +3036,64 @@ function guideSection(id, title, iconName, bodyHtml, defaultOpen) {
   </div>`;
 }
 function renderBriefing() {
-  const li = (s) => `<li style="margin-bottom:6px">${s}</li>`;
-  return `<div class="page"><div class="page-head"><div><div class="page-title display">Briefing do Sistema</div><div class="page-sub">O que este CRM faz, como cada tela funciona e o que ainda depende de você</div></div></div>
+  const li = (t) => `<li style="margin-bottom:6px">${t}</li>`;
+  const ul = (...itens) => `<ul style="margin:0;padding-left:18px">${itens.map(li).join("")}</ul>`;
+  return `<div class="page"><div class="page-head"><div><div class="page-title display">Guia do CRM</div><div class="page-sub">Para que serve cada tela e como usar, passo a passo</div></div></div>
     <div style="padding:18px;background:var(--brand-weak);border-radius:14px;margin-bottom:18px;display:flex;gap:14px">
       <img src="${LOGO_DATA_URI}" alt="Logo" style="width:44px;height:44px;border-radius:50%;flex-shrink:0" />
-      <div style="font-size:13.5px;color:var(--text);line-height:1.7">Este é o <b>CRM de vendas do Viver de Shopee</b>: recebe os leads que preenchem o formulário, organiza cada um nas etapas do funil (do primeiro contato até virar aluno matriculado), centraliza o atendimento via WhatsApp, controla tarefas e agenda da equipe, e gera relatórios reais a partir dos seus próprios dados. Este arquivo funciona sozinho — abra-o em qualquer navegador ou dispositivo e os dados aparecem sincronizados automaticamente.</div></div>
-    ${guideSection("sync", "Como a sincronização funciona", "cloud", `<ul style="margin:0;padding-left:18px">
-      ${li("Este arquivo HTML é autossuficiente — não depende do Claude, de builds ou de nenhum servidor próprio para abrir.")}
-      ${li("Os dados (leads, tarefas, agenda, conversas, equipe) sincronizam em tempo real via um banco de dados na nuvem — assim que alguém muda algo em um aparelho, todo mundo com o arquivo aberto vê a mudança na hora.")}
-      ${li("Não existe tela de configuração para isso — já vem pronto. Basta compartilhar este arquivo .html (por e-mail, WhatsApp, Google Drive, ou hospedando em qualquer lugar) com quem for usar.")}
-      ${li("Se a internet cair, o CRM continua funcionando com os últimos dados salvos neste aparelho, e sincroniza de novo assim que a conexão voltar.")}</ul>`, true)}
-    ${guideSection("dashboard", "Painel (Dashboard)", "layout-dashboard", `Todos os números são calculados na hora a partir dos seus dados reais.<ul style="margin:10px 0 0;padding-left:18px">
-      ${li("Cartões no topo: total de leads, novos, clientes ativos/perdidos, conversão, receita em aberto e receita mensal recorrente.")}
-      ${li("<b>Meta Mensal</b>: você define um valor; o anel mostra o quanto já foi realizado.")}
-      ${li("<b>Ranking da Equipe</b>: soma a receita fechada de cada colaborador cadastrado em Usuários.")}</ul>`)}
-    ${guideSection("atendimento", "Atendimento (Central de WhatsApp)", "message-circle", `<ul style="margin:0;padding-left:18px">
-      ${li("<b>Modo Simulação</b> (padrão): as conversas ficam salvas no CRM, mas o envio não sai de verdade pelo WhatsApp.")}
-      ${li("<b>Modo Conectado</b>: depois de configurar o backend em Integrações, o envio passa a usar a API oficial do WhatsApp Business de verdade.")}
-      ${li('Botão "Converter em Lead": transforma qualquer conversa numa ficha completa de lead.')}
-      ${li("Anexar foto/arquivo (clipe), gravar áudio (microfone) e chamada de vídeo real (Jitsi Meet, grátis) já funcionam de verdade, sem precisar de backend.")}
-      ${li("O ícone de telefone liga de verdade pro número (discador do aparelho); o ícone de link externo abre o WhatsApp de verdade.")}</ul>`)}
-    ${guideSection("funil", "Funil de Vendas", "kanban-square", `Quadro Kanban: arraste os cartões entre as colunas para mudar a etapa. Clique num cartão para abrir a ficha completa do lead. Botão <b>"Editar Etapas"</b> deixa criar, renomear, reordenar e remover etapas — os leads de uma etapa removida são realocados automaticamente, nada se perde. A tela <b>Leads</b> mostra o mesmo funil em formato de tabela.`)}
-    ${guideSection("leads", "Leads (tabela)", "table-2", `A mesma base do funil, em formato de tabela: busca instantânea, ordenação por coluna e filtro por nível. Exportar gera um CSV de verdade; <b>Importar CSV</b> lê o arquivo (por exemplo, a planilha de respostas do seu formulário) e cria os leads automaticamente na etapa "Novo Lead".`)}
-    ${guideSection("clientes", "Alunos", "users", `Mostra automaticamente todo lead cuja etapa é "Aluno Matriculado" — é sempre um espelho ao vivo do funil.`)}
-    ${guideSection("agenda", "Agenda", "calendar-days", `Compromissos da equipe. Os botões de exportar baixam um .ics (abre em qualquer app de calendário) ou abrem direto no Google Agenda, sem conectar conta nenhuma.`)}
-    ${guideSection("tarefas", "Tarefas", "list-checks", `Lista de afazeres da equipe, com responsável, prioridade e prazo. Podem ser vinculadas a um lead específico.`)}
-    ${guideSection("automacao", "Automação do WhatsApp (opcional)", "zap", `<ul style="margin:0;padding-left:18px">
-      ${li("<b>Vem desligada por padrão</b> — existe um interruptor geral no topo da página Automação. Nada é respondido sozinho até você ligar.")}
-      ${li("Crie regras: quando a mensagem do cliente bater com o gatilho (primeira mensagem, ou contém uma palavra-chave/opção de menu), o CRM responde sozinho.")}
-      ${li('Cada regra pode também <b>mover o lead para uma etapa do funil</b> — ótimo para menus do tipo "digite 1 para atendente, 2 para orçamento": quem responde já entra automaticamente na etapa certa (e vira lead, se ainda não fosse um).')}
-      ${li("Cada regra pode <b>avisar a equipe</b> que um atendente humano precisa assumir — a conversa fica marcada, sobe para o topo da lista, e todo mundo com o CRM aberto recebe um som e uma notificação do navegador, em qualquer aparelho.")}
-      ${li('Um botão pronto ("Usar modelo de menu") já cria um exemplo funcionando: menu principal + opção de atendente + opção de orçamento.')}
-      ${li('Pra testar sem esperar um cliente real: em Atendimento, use o botão "Simular mensagem do cliente" — a automação dispara na hora, na tela.')}
-      ${li("Isso já funciona 100% aqui no navegador. Para responder sozinho pelo WhatsApp de verdade, 24 horas, mesmo com o CRM fechado, as mesmas regras também precisam estar no backend (arquivo <code>automation-rules.json</code>, documentado no README do backend-starter).")}</ul>`)}
-    ${guideSection("multiuso", "Vários atendentes no mesmo WhatsApp", "users", `<ul style="margin:0;padding-left:18px">
-      ${li("Como os dados sincronizam em tempo real, toda a equipe já vê e responde as mesmas conversas ao mesmo tempo, em qualquer aparelho — não precisa de nada extra pra isso.")}
-      ${li('Em cada conversa dá pra escolher um "atendente responsável" (menu ao lado do nome do contato) — ajuda a organizar quem está cuidando de cada cliente, sem travar o acesso dos outros.')}
-      ${li("Conversas marcadas como \"aguardando atendimento humano\" pela automação aparecem destacadas para todo mundo, até alguém tocar em \"Marcar como atendido\" (ou simplesmente responder — isso já limpa o aviso sozinho).")}</ul>`)}
-    ${guideSection("relatorios", "Relatórios", "bar-chart-3", `Indicadores de desempenho comercial recalculados a partir dos leads cadastrados no momento.`)}
-    ${guideSection("usuarios", "Usuários", "shield", `<ul style="margin:0;padding-left:18px">
-      ${li("<b>Sua equipe</b>: cadastre os colaboradores para usá-los como responsáveis em leads e tarefas.")}
-      ${li("<b>Perfis de acesso</b>: descritivos — este protótipo não tem login/autenticação real.")}
-      ${li("<b>Atividade recente</b>: histórico real de ações, não é decoração.")}</ul>`)}
-    ${guideSection("integracoes", "Integrações", "plug", `WhatsApp Business API, n8n, Google, Outlook e Webhooks continuam exigindo um backend próprio (pacote <code>backend-starter</code>) por segurança — são serviços externos que precisam de tokens secretos. A sincronização de dados do CRM em si já vem pronta, sem precisar configurar nada.`)}
-    ${guideSection("demo", "Dados de Demonstração", "sparkles", `Em Integrações, "Carregar dados de demonstração" popula o CRM com um conjunto fictício de leads, tarefas, agenda, equipe e conversas de exemplo, claramente identificados. Isso <b>substitui</b> os dados atuais.`)}
-    ${guideSection("pendencias", "O que ainda depende de você", "alert-circle", `<ul style="margin:0;padding-left:18px">
-      ${li("Publicar o backend (<code>backend-starter</code>) num servidor com HTTPS para as integrações de WhatsApp/CNPJ funcionarem de verdade.")}
-      ${li("Criar um app no Meta for Developers para o WhatsApp Business API real.")}
-      ${li("Login/autenticação de usuários reais — hoje qualquer pessoa com o arquivo tem acesso total.")}
-      ${li("Google Calendar, Gmail e Outlook exigem OAuth2 — a estrutura já existe no backend, falta implementar o fluxo de autorização.")}</ul>`)}
+      <div style="font-size:13.5px;color:var(--text);line-height:1.7">Este é o <b>CRM da Viver de Shopee</b>: o lugar onde a equipe acompanha cada pessoa interessada na mentoria, do primeiro contato até virar aluno. Tudo o que você faz é <b>salvo na hora</b> e a equipe inteira vê as mesmas informações. Toque numa seção abaixo para ler.</div></div>
+    ${guideSection("comecar", "Primeiros passos", "layout-dashboard", ul(
+      "Entre com o e-mail e a senha que a equipe te passou. Se esqueceu a senha, use <b>Esqueci minha senha</b> na tela de entrada.",
+      "O <b>menu à esquerda</b> leva a cada tela. No celular, ele abre pelo botão de menu no canto de cima.",
+      "O botão de <b>lua/sol</b> no topo troca entre o visual claro e o escuro.",
+      "Quando você apagar ou mudar algo importante, o CRM <b>pede confirmação</b> antes. Leia com calma: apagar não tem como desfazer."), true)}
+    ${guideSection("painel", "Painel", "layout-dashboard", ul(
+      "É a tela inicial: um resumo do dia com número de leads, quantos viraram alunos, a conversão e a receita.",
+      "<b>Agenda de Hoje</b> mostra os compromissos de hoje, os do CRM e os do Google Agenda.",
+      "<b>Meta mensal</b>: você define um valor e o anel mostra quanto já foi vendido.",
+      "<b>Ranking da equipe</b> mostra quem mais fechou vendas."))}
+    ${guideSection("funil", "Funil de Vendas", "kanban-square", `É um quadro com colunas, uma para cada etapa da venda (Novo Lead, Em contato, Proposta... até <b>Aluno Matriculado</b>). Cada pessoa é um cartão.<ul style="margin:10px 0 0;padding-left:18px">
+      ${li("<b>Arraste o cartão</b> de uma coluna para outra quando a conversa avançar.")}
+      ${li("<b>Clique no cartão</b> para abrir a ficha completa da pessoa.")}
+      ${li("O botão <b>Editar etapas</b> deixa renomear, reordenar, criar e remover etapas. Se remover uma etapa, quem estava nela é movido para outra, ninguém se perde.")}</ul>`)}
+    ${guideSection("leads", "Leads", "table-2", ul(
+      "Mostra as mesmas pessoas do funil, em formato de lista. Use a <b>busca</b> para achar alguém pelo nome, e clique no título de uma coluna para ordenar.",
+      "<b>Novo lead</b> cadastra uma pessoa manualmente.",
+      "<b>Importar</b> traz uma planilha (arquivo CSV) com vários leads de uma vez. <b>Exportar</b> baixa a lista para o seu computador."))}
+    ${guideSection("ficha", "A ficha de cada lead", "users", `Ao clicar numa pessoa, abre uma janela lateral com abas:<ul style="margin:10px 0 0;padding-left:18px">
+      ${li("<b>Dados</b>: contato, nicho, objetivo e origem.")}
+      ${li("<b>Comercial</b>: valor, prioridade e etapa da venda.")}
+      ${li("<b>Histórico</b>: tudo o que já aconteceu com essa pessoa, com data e hora.")}
+      ${li("<b>Anotações</b>: registre ligações, reuniões e combinados. Dá para baixar as anotações.")}
+      ${li("<b>Tarefas</b>: o que ainda falta fazer com ela.")}
+      ${li("Os botões de <b>WhatsApp, ligar e e-mail</b> abrem o aplicativo do seu aparelho já com o contato. Também dá para <b>editar</b> ou <b>excluir</b> a pessoa.")}</ul>`)}
+    ${guideSection("alunos", "Alunos", "users", "Lista automática de todo mundo que está na etapa <b>Aluno Matriculado</b>. Você não cadastra aqui: basta mover a pessoa para essa etapa no funil.")}
+    ${guideSection("formulario", "Formulário", "file-text", ul(
+      "É o <b>questionário de interesse</b> que a pessoa preenche pelo link público, sem precisar de login. Copie o link nesta tela e divulgue.",
+      "Cada resposta <b>vira um lead sozinho</b>, já com uma prioridade (alta, média ou baixa) e na etapa certa do funil, de acordo com a pontuação das respostas.",
+      "Aqui você também edita as perguntas, as cores e o visual do formulário, e vê as respostas recebidas. Use <b>Pré-visualizar</b> para ver como a pessoa vai enxergar, sem enviar nada de verdade.",
+      "Se a pessoa já existe (mesmo telefone ou e-mail), ela não é duplicada: aparece como um novo envio."))}
+    ${guideSection("agenda", "Agenda", "calendar-days", `Compromissos da equipe: reuniões, ligações e retornos.<ul style="margin:10px 0 0;padding-left:18px">
+      ${li("<b>Compromisso</b> cria um novo, com data, hora, duração e, se quiser, a pessoa ligada a ele.")}
+      ${li("Nos compromissos de hoje, use o <b>lápis</b> para editar e a <b>lixeira</b> para excluir.")}
+      ${li("<b>Google Agenda</b>: o CRM está ligado à agenda do Google da empresa. Compromissos criados no Google aparecem aqui e os criados aqui aparecem lá, com link do Google Meet e convite por e-mail se você marcar essas opções.")}
+      ${li("A ligação com o Google é feita <b>uma vez só</b>, no botão <b>Conectar Google Agenda</b>, e vale para toda a equipe. Se um dia aparecer como desconectado, é só clicar em Conectar de novo.")}</ul>`)}
+    ${guideSection("tarefas", "Tarefas", "list-checks", ul(
+      "Lista de afazeres da equipe, com responsável, prazo e, se quiser, a pessoa a que se refere.",
+      "Marque o círculo ao lado da tarefa para concluir. Use o lápis para editar e a lixeira para excluir."))}
+    ${guideSection("atendimento", "Atendimento e Automação (WhatsApp)", "message-circle", ul(
+      "Estas telas fazem parte de uma etapa que <b>ainda está em preparação</b>: por enquanto, as conversas do WhatsApp não chegam ao CRM.",
+      "Enquanto isso, use o botão de <b>WhatsApp na ficha do lead</b>: ele abre a conversa no seu próprio WhatsApp e você registra o que foi combinado em <b>Anotações</b>."))}
+    ${guideSection("relatorios", "Relatórios", "bar-chart-3", "Gráficos e números do desempenho comercial: quantos leads entraram, de onde vieram, quantos fecharam e quanto foi vendido. Os números são calculados na hora, com o que está cadastrado.")}
+    ${guideSection("usuarios", "Usuários", "shield", ul(
+      "Cadastre aqui os nomes da equipe para poder escolher <b>quem é o responsável</b> por cada lead e tarefa.",
+      "<b>Atividade recente</b> mostra as últimas ações feitas no CRM.",
+      "Para criar um novo acesso (e-mail e senha), peça a quem administra o sistema."))}
+    ${guideSection("dicas", "Dicas e dúvidas comuns", "sparkles", ul(
+      "<b>Não vejo uma informação nova:</b> recarregue a página (tecla F5, ou Ctrl+F5).",
+      "<b>Mudou a etapa sem querer:</b> arraste o cartão de volta, o Histórico da pessoa registra tudo.",
+      "<b>Mais de uma pessoa mexendo ao mesmo tempo:</b> pode. As mudanças aparecem para todo mundo em instantes.",
+      "<b>Excluí algo sem querer:</b> avise quem administra o sistema o quanto antes."))}
   </div>`;
 }
 
