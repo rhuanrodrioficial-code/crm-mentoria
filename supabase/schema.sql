@@ -323,3 +323,12 @@ end $$;
 
 revoke all on function public.enviar_formulario(text, jsonb, text, text) from public;
 grant execute on function public.enviar_formulario(text, jsonb, text, text) to anon, authenticated;
+
+-- Google Agenda fixo: guarda o token de renovação do Google (uma conexão para a equipe toda).
+-- RLS ligado e SEM política: nem o navegador nem usuário logado lê; só a função do Netlify (service_role).
+create table if not exists public.gcal_conexao (
+  id            text primary key default 'principal',
+  refresh_token text not null,
+  atualizado    timestamptz not null default now()
+);
+alter table public.gcal_conexao enable row level security;

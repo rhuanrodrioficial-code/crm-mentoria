@@ -1310,39 +1310,57 @@ const gcalCal = () => encodeURIComponent((state.gcal && state.gcal.calendarId) |
 const gcalLinkSeguro = (u) => (typeof u === "string" && /^https:\/\/([a-z0-9-]+\.)*google\.com\//i.test(u)) ? u : "";
 function gcalRedesenhar() { if (ui.modal) gcalBoxAtualizar(); else render(); }
 
-// silencioso = reconexão automática (sem clique): não mostra avisos e não força escolha de conta
-function gcalConectar(depois, silencioso) {
+// A conexão fica fixa porque o servidor (função do Netlify) guarda o token de renovação do Google;
+// o navegador só pede um acesso novo quando precisa. Ver netlify/functions/gcal.js.
+async function gcalServidor(action, extra) {
+  if (!sb) throw new Error("Entre no CRM para conectar o Google Agenda.");
+  const { data } = await sb.auth.getSession();
+  const jwt = data && data.session && data.session.access_token;
+  if (!jwt) throw new Error("Entre no CRM para conectar o Google Agenda.");
+  const r = await fetch("/.netlify/functions/gcal", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + jwt }, body: JSON.stringify({ action, ...(extra || {}) }) });
+  let b = {}; try { b = await r.json(); } catch (e) {}
+  if (!r.ok) { const e = new Error(b.erro || "erro " + r.status); e.status = r.status; throw e; }
+  return b;
+}
+function gcalGuardarToken(b) {
+  const lista = ui.gcal ? ui.gcal.lista : null; // renovar o acesso não apaga a lista já carregada
+  ui.gcal = { token: b.access_token, exp: Date.now() + (Number(b.expires_in) || 3600) * 1000 - 60000, lista, erro: "", carregando: false };
+}
+async function gcalRenovar() {
+  try { gcalGuardarToken(await gcalServidor("token")); return true; } catch (e) { return false; }
+}
+function gcalConectar(depois) {
   const id = ((state.gcal && state.gcal.clientId) || "").trim();
-  if (!id) { if (!silencioso) openModal("gcal-config"); return; }
+  if (!id) { openModal("gcal-config"); return; }
   if (!(window.google && google.accounts && google.accounts.oauth2)) {
-    if (silencioso) { carregarGis().then(() => gcalConectar(depois, true)).catch(() => {}); return; }
     carregarGis().then(() => toast("Pronto. Clique em Conectar de novo.")).catch(() => toast("Não foi possível carregar o Google. Verifique a internet ou o bloqueador de anúncios."));
     return;
   }
-  const tc = google.accounts.oauth2.initTokenClient({
-    client_id: id, scope: GCAL_SCOPE,
-    callback: (r) => {
-      if (r.error || !r.access_token) { if (!silencioso) toast("Não foi possível conectar ao Google."); return; }
-      const lista = ui.gcal ? ui.gcal.lista : null; // renovar o token não apaga a lista já carregada
-      ui.gcal = { token: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000 - 60000, lista, erro: "", carregando: false };
-      store.set("gcalAuto", "1"); // lembra que já conectou: nas próximas aberturas tenta reconectar sozinho
-      if (!silencioso) toast("Google Agenda conectado.");
-      if (depois) depois();
-      gcalAtualizar();
+  const cc = google.accounts.oauth2.initCodeClient({
+    client_id: id, scope: GCAL_SCOPE, ux_mode: "popup", select_account: true, // deixa escolher a conta Google, não só a que já está aberta no navegador
+    callback: async (r) => {
+      if (r.error || !r.code) { toast("Não foi possível conectar ao Google."); return; }
+      try {
+        const b = await gcalServidor("conectar", { code: r.code });
+        gcalGuardarToken(b);
+        toast(b.fixo ? "Google Agenda conectado." : "Conectado só por 1 hora: o Google já tinha a permissão. Em myaccount.google.com/permissions remova o app e conecte de novo.");
+        if (depois) depois();
+        gcalAtualizar();
+      } catch (e) { toast("Não foi possível conectar: " + (e.message === "configuracao" ? "faltam as chaves do Google no Netlify." : e.message)); }
     },
-    error_callback: () => { if (!silencioso) toast("Conexão com o Google cancelada."); },
+    error_callback: () => toast("Conexão com o Google cancelada."),
   });
-  tc.requestAccessToken(silencioso ? { prompt: "" } : { prompt: "select_account" }); // manual: deixa escolher a conta Google, não só a que já está aberta no navegador
+  cc.requestCode();
 }
-// Ao abrir o CRM: se já conectou antes neste navegador, tenta reconectar sem clique.
-// Depois, a cada minuto renova o token perto de vencer e atualiza a lista a cada 5 min.
-function gcalAutoConectar() {
-  if (!(state.gcal && state.gcal.clientId) || store.get("gcalAuto") !== "1") return;
-  if (!gcalConectado()) gcalConectar(null, true);
+// Ao abrir o CRM: pede ao servidor um acesso novo (sem popup). Depois, a cada minuto renova o acesso
+// perto de vencer e atualiza a lista a cada 5 min.
+async function gcalAutoConectar() {
+  if (!(state.gcal && state.gcal.clientId) || !sb) return;
+  if (!gcalConectado() && await gcalRenovar()) gcalAtualizar();
   if (gcalAutoTimer) return;
   gcalAutoTimer = setInterval(() => {
     if (!(state.gcal && state.gcal.clientId) || !ui.gcal) return;
-    if (Date.now() > ui.gcal.exp - 3 * 60000) gcalConectar(null, true);
+    if (Date.now() > ui.gcal.exp - 3 * 60000) gcalRenovar();
     else if (Date.now() - (ui.gcal.ultimo || 0) > 5 * 60000) gcalAtualizar();
   }, 60000);
 }
@@ -1361,8 +1379,10 @@ function gcalExternos() {
   return ui.gcal.lista.filter(i => !meus.has(i.id));
 }
 async function gcalApi(path, opts = {}) {
-  if (!gcalConectado()) throw new Error("Google Agenda desconectado");
-  const r = await fetch(GCAL_API + path, { ...opts, headers: { Authorization: "Bearer " + ui.gcal.token, "Content-Type": "application/json" } });
+  if (!gcalConectado() && !(await gcalRenovar())) throw new Error("Google Agenda desconectado");
+  const chamar = () => fetch(GCAL_API + path, { ...opts, headers: { Authorization: "Bearer " + ui.gcal.token, "Content-Type": "application/json" } });
+  let r = await chamar();
+  if (r.status === 401 && await gcalRenovar()) r = await chamar();
   if (r.status === 401) { ui.gcal = null; throw new Error("sessão do Google expirou, conecte de novo"); }
   if (!r.ok) { let m = ""; try { m = (await r.json()).error.message; } catch (e) {} throw new Error(m || "erro " + r.status); }
   return r.status === 204 ? null : r.json();
@@ -1424,7 +1444,7 @@ function gcalCardHtml() {
     corpo = `<div style="font-size:13px;color:var(--text-2);line-height:1.6">Ligue o Google Agenda para criar compromissos já na sua agenda, com link do Google Meet e convite por e-mail. Leva uns 10 minutos, uma vez só.</div>`;
   } else if (!on) {
     acoes = `<button class="btn btn-p" data-action="gcal-connect">${icon("cloud", 15)}Conectar Google Agenda</button><button class="btn btn-g" data-action="gcal-config">Ajustes</button>`;
-    corpo = `<div style="font-size:13px;color:var(--text-2);line-height:1.6">Entre com a conta Google dona da agenda. Depois da primeira vez, o CRM tenta reconectar sozinho ao abrir; se o navegador pedir, é só clicar de novo.</div>`;
+    corpo = `<div style="font-size:13px;color:var(--text-2);line-height:1.6">Entre com a conta Google dona da agenda. É uma vez só: depois a conexão fica fixa e vale para toda a equipe.</div>`;
   } else {
     acoes = `<button class="btn btn-g" data-action="gcal-refresh">Atualizar</button><button class="btn btn-g" data-action="gcal-config">Ajustes</button><button class="btn btn-g" data-action="gcal-disconnect">Desconectar</button>`;
     corpo = gu.erro ? `<div class="inline-msg" style="background:var(--bad-weak);color:var(--bad)">${esc(gu.erro)}</div>`
@@ -1487,7 +1507,7 @@ function modalGcalConfig() {
     $("#btnSalvarGcal").addEventListener("click", () => {
       const clientId = $("#gcClient").value.trim(), calendarId = $("#gcCal").value.trim() || "primary";
       if (clientId && !/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/i.test(clientId)) { toast("Esse ID do cliente parece errado. Ele termina com .apps.googleusercontent.com"); return; }
-      state.gcal = { clientId, calendarId }; ui.gcal = null; if (!clientId) store.remove("gcalAuto");
+      state.gcal = { clientId, calendarId }; ui.gcal = null;
       saveSlice("gcal"); closeModal(); render();
       toast(clientId ? "Google Agenda configurado. Clique em Conectar." : "Google Agenda desligado.");
       if (clientId) carregarGis().catch(() => {});
@@ -4027,9 +4047,11 @@ function setupGlobalEvents() {
       case "gcal-modal-connect": gcalConectar(gcalBoxAtualizar); break;
       case "gcal-refresh": gcalAtualizar(); break;
       case "gcal-disconnect": {
-        const tk = ui.gcal && ui.gcal.token; ui.gcal = null; store.remove("gcalAuto");
-        if (tk && window.google && google.accounts && google.accounts.oauth2) google.accounts.oauth2.revoke(tk, () => {});
-        toast("Google Agenda desconectado."); render(); break;
+        customConfirm("Desconectar o Google Agenda? Isso vale para toda a equipe: será preciso conectar de novo.", true, async () => {
+          try { await gcalServidor("desconectar"); } catch (e) { toast("Não foi possível desconectar: " + e.message); return; }
+          ui.gcal = null; toast("Google Agenda desconectado."); render();
+        });
+        break;
       }
       case "edit-meta": ui.editingMeta = true; render(); setTimeout(() => { const i = $("#metaInput"); if (i) i.focus(); }, 0); break;
       case "save-meta": { const v = $("#metaInput").value; ui.editingMeta = false; setMeta(v); break; }
