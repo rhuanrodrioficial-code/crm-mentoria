@@ -1310,25 +1310,55 @@ const gcalCal = () => encodeURIComponent((state.gcal && state.gcal.calendarId) |
 const gcalLinkSeguro = (u) => (typeof u === "string" && /^https:\/\/([a-z0-9-]+\.)*google\.com\//i.test(u)) ? u : "";
 function gcalRedesenhar() { if (ui.modal) gcalBoxAtualizar(); else render(); }
 
-function gcalConectar(depois) {
+// silencioso = reconexão automática (sem clique): não mostra avisos e não força escolha de conta
+function gcalConectar(depois, silencioso) {
   const id = ((state.gcal && state.gcal.clientId) || "").trim();
-  if (!id) { openModal("gcal-config"); return; }
+  if (!id) { if (!silencioso) openModal("gcal-config"); return; }
   if (!(window.google && google.accounts && google.accounts.oauth2)) {
+    if (silencioso) { carregarGis().then(() => gcalConectar(depois, true)).catch(() => {}); return; }
     carregarGis().then(() => toast("Pronto. Clique em Conectar de novo.")).catch(() => toast("Não foi possível carregar o Google. Verifique a internet ou o bloqueador de anúncios."));
     return;
   }
   const tc = google.accounts.oauth2.initTokenClient({
     client_id: id, scope: GCAL_SCOPE,
     callback: (r) => {
-      if (r.error || !r.access_token) { toast("Não foi possível conectar ao Google."); return; }
-      ui.gcal = { token: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000 - 60000, lista: null, erro: "", carregando: false };
-      toast("Google Agenda conectado.");
+      if (r.error || !r.access_token) { if (!silencioso) toast("Não foi possível conectar ao Google."); return; }
+      const lista = ui.gcal ? ui.gcal.lista : null; // renovar o token não apaga a lista já carregada
+      ui.gcal = { token: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000 - 60000, lista, erro: "", carregando: false };
+      store.set("gcalAuto", "1"); // lembra que já conectou: nas próximas aberturas tenta reconectar sozinho
+      if (!silencioso) toast("Google Agenda conectado.");
       if (depois) depois();
       gcalAtualizar();
     },
-    error_callback: () => toast("Conexão com o Google cancelada."),
+    error_callback: () => { if (!silencioso) toast("Conexão com o Google cancelada."); },
   });
-  tc.requestAccessToken({ prompt: "select_account" }); // sempre deixa escolher a conta Google, não só a que já está aberta no navegador
+  tc.requestAccessToken(silencioso ? { prompt: "" } : { prompt: "select_account" }); // manual: deixa escolher a conta Google, não só a que já está aberta no navegador
+}
+// Ao abrir o CRM: se já conectou antes neste navegador, tenta reconectar sem clique.
+// Depois, a cada minuto renova o token perto de vencer e atualiza a lista a cada 5 min.
+function gcalAutoConectar() {
+  if (!(state.gcal && state.gcal.clientId) || store.get("gcalAuto") !== "1") return;
+  if (!gcalConectado()) gcalConectar(null, true);
+  if (gcalAutoTimer) return;
+  gcalAutoTimer = setInterval(() => {
+    if (!(state.gcal && state.gcal.clientId) || !ui.gcal) return;
+    if (Date.now() > ui.gcal.exp - 3 * 60000) gcalConectar(null, true);
+    else if (Date.now() - (ui.gcal.ultimo || 0) > 5 * 60000) gcalAtualizar();
+  }, 60000);
+}
+let gcalAutoTimer = null;
+// Data local (aaaa-mm-dd) de um evento do Google; dia inteiro vem pronto em start.date
+function gcalDataItem(i) {
+  if (!i.start) return "";
+  if (i.start.date) return i.start.date;
+  const d = new Date(i.start.dateTime); if (isNaN(d)) return "";
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+// Eventos do Google a mostrar junto dos do CRM (os criados pelo CRM já estão em state.eventos)
+function gcalExternos() {
+  if (!gcalConectado() || !ui.gcal.lista) return [];
+  const meus = new Set(state.eventos.map(e => e.gcalId).filter(Boolean));
+  return ui.gcal.lista.filter(i => !meus.has(i.id));
 }
 async function gcalApi(path, opts = {}) {
   if (!gcalConectado()) throw new Error("Google Agenda desconectado");
@@ -1339,12 +1369,15 @@ async function gcalApi(path, opts = {}) {
 }
 async function gcalAtualizar() {
   if (!gcalConectado()) return;
-  const ini = new Date(); ini.setHours(0, 0, 0, 0);
-  const fim = new Date(ini.getTime() + 14 * 864e5);
+  // do 1º dia do mês (para o calendário mensal) até o fim do mês ou 14 dias à frente, o que for maior
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+  const fim = new Date(Math.max(fimMes.getTime(), hoje.getTime() + 14 * 864e5));
   ui.gcal.carregando = true;
   try {
-    const d = await gcalApi(`/calendars/${gcalCal()}/events?singleEvents=true&orderBy=startTime&maxResults=30&timeMin=${encodeURIComponent(ini.toISOString())}&timeMax=${encodeURIComponent(fim.toISOString())}`);
-    ui.gcal.lista = (d.items || []).filter(i => i.status !== "cancelled"); ui.gcal.erro = "";
+    const d = await gcalApi(`/calendars/${gcalCal()}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${encodeURIComponent(ini.toISOString())}&timeMax=${encodeURIComponent(fim.toISOString())}`);
+    ui.gcal.lista = (d.items || []).filter(i => i.status !== "cancelled"); ui.gcal.erro = ""; ui.gcal.ultimo = Date.now();
   } catch (e) { if (ui.gcal) ui.gcal.erro = e.message; else toast("A sessão do Google expirou. Conecte de novo."); }
   if (ui.gcal) ui.gcal.carregando = false;
   if (ui.view === "agenda" && !ui.modal) render();
@@ -1376,19 +1409,21 @@ function gcalItemHtml(i) {
 }
 function gcalCardHtml() {
   const g = state.gcal || {}, on = gcalConectado(), gu = ui.gcal || {};
+  const lim = new Date(); lim.setHours(0, 0, 0, 0); const limFim = lim.getTime() + 14 * 864e5;
+  const proximos = (gu.lista || []).filter(i => { const d = new Date(gcalDataItem(i) + "T00:00:00").getTime(); return d >= lim.getTime() && d < limFim; }).slice(0, 30);
   let acoes, corpo;
   if (!g.clientId) {
     acoes = `<button class="btn btn-p" data-action="gcal-config">Configurar</button>`;
     corpo = `<div style="font-size:13px;color:var(--text-2);line-height:1.6">Ligue o Google Agenda para criar compromissos já na sua agenda, com link do Google Meet e convite por e-mail. Leva uns 10 minutos, uma vez só.</div>`;
   } else if (!on) {
     acoes = `<button class="btn btn-p" data-action="gcal-connect">${icon("cloud", 15)}Conectar Google Agenda</button><button class="btn btn-g" data-action="gcal-config">Ajustes</button>`;
-    corpo = `<div style="font-size:13px;color:var(--text-2);line-height:1.6">Entre com a conta Google dona da agenda para usar neste computador. Por segurança, é preciso reconectar ao recarregar a página.</div>`;
+    corpo = `<div style="font-size:13px;color:var(--text-2);line-height:1.6">Entre com a conta Google dona da agenda. Depois da primeira vez, o CRM tenta reconectar sozinho ao abrir; se o navegador pedir, é só clicar de novo.</div>`;
   } else {
     acoes = `<button class="btn btn-g" data-action="gcal-refresh">Atualizar</button><button class="btn btn-g" data-action="gcal-config">Ajustes</button><button class="btn btn-g" data-action="gcal-disconnect">Desconectar</button>`;
     corpo = gu.erro ? `<div class="inline-msg" style="background:var(--bad-weak);color:var(--bad)">${esc(gu.erro)}</div>`
       : gu.lista == null ? `<div style="font-size:13px;color:var(--text-3)">Carregando…</div>`
-      : gu.lista.length === 0 ? `<div style="font-size:13px;color:var(--text-3)">Nada no Google Agenda nos próximos 14 dias.</div>`
-      : gu.lista.map(gcalItemHtml).join("");
+      : !proximos.length ? `<div style="font-size:13px;color:var(--text-3)">Nada no Google Agenda nos próximos 14 dias.</div>`
+      : proximos.map(gcalItemHtml).join("");
   }
   return `<div class="card" style="padding:18px;margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
@@ -1441,7 +1476,7 @@ function modalGcalConfig() {
     $("#btnSalvarGcal").addEventListener("click", () => {
       const clientId = $("#gcClient").value.trim(), calendarId = $("#gcCal").value.trim() || "primary";
       if (clientId && !/^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$/i.test(clientId)) { toast("Esse ID do cliente parece errado. Ele termina com .apps.googleusercontent.com"); return; }
-      state.gcal = { clientId, calendarId }; ui.gcal = null;
+      state.gcal = { clientId, calendarId }; ui.gcal = null; if (!clientId) store.remove("gcalAuto");
       saveSlice("gcal"); closeModal(); render();
       toast(clientId ? "Google Agenda configurado. Clique em Conectar." : "Google Agenda desligado.");
       if (clientId) carregarGis().catch(() => {});
@@ -1913,6 +1948,7 @@ async function loadAllFromApi() {
     await sbLoadAll();
     sbSubscribe();
     ui.apiLoading = false;
+    gcalAutoConectar();
   } catch (e) {
     ui.apiLoading = false;
     console.error("[loadAllFromApi] falha ao carregar dados:", e);
@@ -2318,7 +2354,11 @@ function renderAgenda() {
   const eventos = state.eventos;
   const dias = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const byDay = {}; eventos.forEach(e => { const d = Number(e.data.split("-")[2]); (byDay[d] = byDay[d] || []).push(e); });
+  const externos = gcalExternos(); // eventos que estão só no Google Agenda
+  const prefMes = TODAY_STR.slice(0, 7);
+  externos.forEach(i => { const ds = gcalDataItem(i); if (ds.startsWith(prefMes)) (byDay[Number(ds.slice(8, 10))] = byDay[Number(ds.slice(8, 10))] || []).push({ tipo: "Google" }); });
   const hoje = eventos.filter(e => e.data === TODAY_STR).sort((a, b) => a.hora.localeCompare(b.hora));
+  const hojeGoogle = externos.filter(i => gcalDataItem(i) === TODAY_STR);
   const todayNum = Number(TODAY_STR.split("-")[2]);
   const daysInMonth = new Date(Number(TODAY_STR.slice(0, 4)), Number(TODAY_STR.slice(5, 7)), 0).getDate();
   const firstWeekday = new Date(TODAY_STR.slice(0, 7) + "-01").getDay();
@@ -2340,7 +2380,14 @@ function renderAgenda() {
         ${dias.map(d => `<div style="text-align:center;font-size:11px;font-weight:700;color:var(--text-3);padding:4px 0">${d}</div>`).join("")}${cells}
       </div></div>
       <div class="card"><div class="card-h"><div class="card-t">Compromissos de hoje</div></div>
-        <div style="margin-top:8px">${hoje.length === 0 ? `<div style="padding:24px 18px;text-align:center;color:var(--text-3);font-size:13px">Nada agendado para hoje.</div>` : hoje.map(e => `
+        <div style="margin-top:8px">${hojeGoogle.map(i => {
+          const hr = i.start.dateTime ? new Date(i.start.dateTime).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "Dia todo";
+          const meet = gcalLinkSeguro(i.hangoutLink), abrir = gcalLinkSeguro(i.htmlLink);
+          return `<div class="act-row"><span class="act-time">${esc(hr)}</span><span class="act-dot" style="background:var(--sky)"></span>
+            <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow-wrap:anywhere">${esc(i.summary || "(sem título)")}</div>
+              <div style="margin-top:4px"><span class="chip" style="background:var(--surface-2);color:var(--text-2)">Google Agenda</span></div></div>
+            ${meet ? `<a class="icon-btn" style="width:30px;height:30px" title="Entrar no Google Meet" href="${esc(meet)}" target="_blank" rel="noopener noreferrer">${icon("video", 15)}</a>` : ""}
+            ${abrir ? `<a class="icon-btn" style="width:30px;height:30px" title="Abrir no Google Agenda" href="${esc(abrir)}" target="_blank" rel="noopener noreferrer">${icon("external-link", 15)}</a>` : ""}</div>`; }).join("")}${hoje.length === 0 && hojeGoogle.length === 0 ? `<div style="padding:24px 18px;text-align:center;color:var(--text-3);font-size:13px">Nada agendado para hoje.</div>` : hoje.map(e => `
           <div class="act-row"><span class="act-time">${e.hora}</span><span class="act-dot" style="background:${TYPE_COLOR[e.tipo] || "var(--brand)"}"></span>
             <div style="flex:1"><div style="font-size:13px;font-weight:500">${esc(e.titulo)}</div>
               <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap"><span class="chip" style="background:${TYPE_COLOR[e.tipo] || "var(--brand)"}1a;color:${TYPE_COLOR[e.tipo] || "var(--brand)"}">${esc(e.tipo)}</span>${e.leadId && leadName(e.leadId) ? `<span class="chip" style="background:var(--surface-2);color:var(--text-2)">${esc(leadName(e.leadId))}</span>` : ""}</div></div>
@@ -3903,7 +3950,7 @@ function setupGlobalEvents() {
       case "gcal-modal-connect": gcalConectar(gcalBoxAtualizar); break;
       case "gcal-refresh": gcalAtualizar(); break;
       case "gcal-disconnect": {
-        const tk = ui.gcal && ui.gcal.token; ui.gcal = null;
+        const tk = ui.gcal && ui.gcal.token; ui.gcal = null; store.remove("gcalAuto");
         if (tk && window.google && google.accounts && google.accounts.oauth2) google.accounts.oauth2.revoke(tk, () => {});
         toast("Google Agenda desconectado."); render(); break;
       }
