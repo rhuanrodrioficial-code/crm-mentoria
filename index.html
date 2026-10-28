@@ -1147,7 +1147,11 @@ function sbAplicarKv(linhas) {
 }
 let sbReloadTimer = null, sbKvReloadTimer = null;
 let sbChannel = null;
-function sbSubscribe() {
+async function sbSubscribe() {
+  if (sbChannel) return;
+  // Entrega o login ao Realtime antes de inscrever: sem ele o canal entra como visitante e o RLS
+  // (leitura só para usuário logado) descarta todos os avisos, mesmo com o selo "Sincronizado".
+  try { const { data } = await sb.auth.getSession(); if (data && data.session) sb.realtime.setAuth(data.session.access_token); } catch (e) {}
   if (sbChannel) return;
   const onChange = () => {
     if (Date.now() - sbLastLocalWrite < 1500) return; // eco da nossa própria gravação
@@ -2045,7 +2049,7 @@ async function loadAllFromApi() {
   ui.apiLoading = true;
   try {
     await sbLoadAll();
-    sbSubscribe();
+    await sbSubscribe();
     ui.apiLoading = false;
     gcalAutoConectar();
   } catch (e) {
