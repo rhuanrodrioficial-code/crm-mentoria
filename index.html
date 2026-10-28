@@ -1089,15 +1089,18 @@ function sbSyncLeads() {
     const removed = [...sbLeadSnap.keys()].filter(id => !keep.has(id));
     if (!changed.length && !removed.length) return;
     sbLastLocalWrite = Date.now();
-    if (changed.length) {
-      const { error } = await sb.from("leads").upsert(changed);
+    // Em lotes: importar milhares de leads de uma vez estoura o tamanho do pedido (e a URL do delete).
+    for (let i = 0; i < changed.length; i += 500) {
+      const lote = changed.slice(i, i + 500);
+      const { error } = await sb.from("leads").upsert(lote);
       if (error) return sbFail("leads.upsert", error);
-      changed.forEach(r => sbLeadSnap.set(r.id, JSON.stringify(r)));
+      lote.forEach(r => sbLeadSnap.set(r.id, JSON.stringify(r)));
     }
-    if (removed.length) {
-      const { error } = await sb.from("leads").delete().in("id", removed);
+    for (let i = 0; i < removed.length; i += 100) {
+      const lote = removed.slice(i, i + 100);
+      const { error } = await sb.from("leads").delete().in("id", lote);
       if (error) return sbFail("leads.delete", error);
-      removed.forEach(id => sbLeadSnap.delete(id));
+      lote.forEach(id => sbLeadSnap.delete(id));
     }
   }).catch(e => sbFail("leads", e));
   return sbLeadChain;
@@ -1110,11 +1113,21 @@ function sbQueueKv(key) {
     if (error) sbFail("kv." + key, error);
   }, 500);
 }
+// O Supabase corta cada busca em 1.000 linhas; lê em blocos até acabar (ordem estável por desempate no id).
+async function sbPaginar(tabela, ordem, ordem2) {
+  const TAM = 1000, todos = [];
+  for (let de = 0; ; de += TAM) {
+    const { data, error } = await sb.from(tabela).select("*").order(ordem, { ascending: false }).order(ordem2, { ascending: true }).range(de, de + TAM - 1);
+    if (error) return { data: null, error };
+    todos.push(...data);
+    if (data.length < TAM) return { data: todos, error: null };
+  }
+}
 async function sbLoadAll() {
   const [leadsRes, kvRes, notasRes] = await Promise.all([
-    sb.from("leads").select("*").order("created_at", { ascending: false }),
+    sbPaginar("leads", "created_at", "id"),
     sb.from("kv").select("key,value"),
-    sb.from("lead_notas").select("*").order("data_evento", { ascending: false }),
+    sbPaginar("lead_notas", "data_evento", "id"),
   ]);
   if (leadsRes.error) throw leadsRes.error;
   if (kvRes.error) throw kvRes.error;
@@ -1124,12 +1137,15 @@ async function sbLoadAll() {
   state.leads = leadsRes.data.map(leadFromRow);
   sbLeadSnap.clear();
   state.leads.forEach(l => { const row = leadToRow(l); sbLeadSnap.set(row.id, JSON.stringify(row)); });
-  kvRes.data.forEach(r => { if (SB_KV_KEYS.includes(r.key) && r.value !== null) state[r.key] = r.value; });
+  sbAplicarKv(kvRes.data);
+}
+function sbAplicarKv(linhas) {
+  linhas.forEach(r => { if (SB_KV_KEYS.includes(r.key) && r.value !== null) state[r.key] = r.value; });
   if (!Array.isArray(state.stages) || !state.stages.length) state.stages = DEFAULT_STAGES.map(s => ({ ...s }));
   // Cores entram em atributos style="..." — aceita só hex, descarta o resto.
   state.stages = state.stages.map((s, i) => ({ ...s, cor: /^#[0-9a-fA-F]{3,8}$/.test(s.cor) ? s.cor : AV[i % AV.length] }));
 }
-let sbReloadTimer = null;
+let sbReloadTimer = null, sbKvReloadTimer = null;
 let sbChannel = null;
 function sbSubscribe() {
   if (sbChannel) return;
@@ -1138,12 +1154,44 @@ function sbSubscribe() {
     clearTimeout(sbReloadTimer);
     sbReloadTimer = setTimeout(() => sbLoadAll().then(render).catch(() => {}), 400);
   };
+  // Leads e anotações: aplica só a linha que mudou (recarregar milhares de leads a cada novo cadastro pesa).
+  // O eco das nossas gravações some sozinho: a linha recebida é igual à que já temos.
+  let sbRenderTimer = null;
+  const renderSoon = () => { clearTimeout(sbRenderTimer); sbRenderTimer = setTimeout(render, 150); };
+  const onLead = (pl) => {
+    try {
+      if (pl.eventType === "DELETE") {
+        const id = pl.old && pl.old.id; if (!id) return onChange();
+        if (!sbLeadSnap.has(id)) return;
+        sbLeadSnap.delete(id); state.leads = state.leads.filter(l => l.id !== id); renderSoon(); return;
+      }
+      const lead = leadFromRow(pl.new), txt = JSON.stringify(leadToRow(lead));
+      if (sbLeadSnap.get(lead.id) === txt) return;
+      sbLeadSnap.set(lead.id, txt);
+      const i = state.leads.findIndex(l => l.id === lead.id);
+      if (i >= 0) state.leads[i] = lead; else state.leads.unshift(lead);
+      renderSoon();
+    } catch (e) { onChange(); }
+  };
+  const onNota = (pl) => {
+    try {
+      if (pl.eventType === "DELETE") { const id = pl.old && pl.old.id; if (!id) return onChange(); state.notas = state.notas.filter(n => n.id !== id); renderSoon(); return; }
+      const n = notaFromRow(pl.new), i = state.notas.findIndex(x => x.id === n.id);
+      if (i >= 0) { if (JSON.stringify(state.notas[i]) === JSON.stringify(n)) return; state.notas[i] = n; } else state.notas.unshift(n);
+      renderSoon();
+    } catch (e) { onChange(); }
+  };
   sbChannel = sb.channel("crm-sync")
-    .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, onChange)
-    .on("postgres_changes", { event: "*", schema: "public", table: "kv" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "leads" }, onLead)
+    .on("postgres_changes", { event: "*", schema: "public", table: "kv" }, () => {
+      if (Date.now() - sbLastLocalWrite < 1500) return;
+      clearTimeout(sbKvReloadTimer);
+      // só a tabela kv (pequena): o histórico muda a cada ação e não deve recarregar os leads
+      sbKvReloadTimer = setTimeout(async () => { const r = await sb.from("kv").select("key,value"); if (!r.error) { sbAplicarKv(r.data); render(); } }, 400);
+    })
     .subscribe((status) => { syncState = status === "SUBSCRIBED" ? "on" : status === "CHANNEL_ERROR" ? "error" : "connecting"; render(); });
   // Canal separado: se a tabela de anotações não existir, não derruba a sincronização dos leads.
-  if (notasDisponivel) sb.channel("crm-notas").on("postgres_changes", { event: "*", schema: "public", table: "lead_notas" }, onChange).subscribe();
+  if (notasDisponivel) sb.channel("crm-notas").on("postgres_changes", { event: "*", schema: "public", table: "lead_notas" }, onNota).subscribe();
 }
 function sbUserFromSession(session) {
   const u = session.user;
@@ -1290,7 +1338,8 @@ function addTask(t) {
 }
 /* ---------- Google Agenda (direto do navegador, sem servidor) ---------- */
 const GCAL_API = "https://www.googleapis.com/calendar/v3";
-const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+// gmail.send: só permite enviar e-mails (não lê a caixa de entrada)
+const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.send";
 let gisPromise = null;
 function carregarGis() {
   if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
@@ -1513,6 +1562,37 @@ function modalGcalConfig() {
     });
   }, 0);
   return modalWrap("gcal-config", "Configurar Google Agenda", "calendar-days", body, foot);
+}
+
+// Envio de e-mail pelo Gmail da conta conectada (mesma conexão do Google Agenda)
+function modalEmail(lead) {
+  if (!lead) return "";
+  const nome = (lead.nome || "").split(" ")[0];
+  const body = `<div class="field-l"><label>Para</label><input id="emPara" value="${esc(lead.email || "")}" placeholder="email@exemplo.com" /></div>
+    <div class="field-l" style="margin-top:12px"><label>Assunto</label><input id="emAssunto" value="${esc("Contato — Viver de Shopee")}" maxlength="200" /></div>
+    <div class="field-l" style="margin-top:12px"><label>Mensagem</label><textarea id="emTexto" rows="9" maxlength="8000" style="width:100%;resize:vertical">${esc("Olá " + nome + ", tudo bem?\n\n")}</textarea>
+      <div style="font-size:11.5px;color:var(--text-3);margin-top:5px">Sai do Gmail conectado ao CRM. As respostas chegam nessa caixa de entrada.</div></div>`;
+  const foot = `<button class="btn btn-g" data-action="close-modal">Cancelar</button><button class="btn btn-p" id="btnEnviarEmail">${icon("mail", 15)}Enviar</button>`;
+  setTimeout(() => {
+    $("#btnEnviarEmail").addEventListener("click", async () => {
+      const btn = $("#btnEnviarEmail");
+      const para = $("#emPara").value.trim(), assunto = $("#emAssunto").value.trim(), texto = $("#emTexto").value;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(para)) { toast("Informe um e-mail válido."); return; }
+      if (!assunto || !texto.trim()) { toast("Preencha o assunto e a mensagem."); return; }
+      btn.disabled = true;
+      try {
+        await gcalServidor("enviar", { para, assunto, texto });
+        addLogEntry(`E-mail enviado para ${para}: "${assunto}"`, lead.id);
+        closeModal(); toast("E-mail enviado.");
+      } catch (e) {
+        btn.disabled = false;
+        toast(e.message === "nao_conectado" || e.message === "expirou" ? "Google não conectado. Conecte em Agenda."
+          : e.message === "sem_permissao" ? "Falta a permissão de e-mail. Em Agenda, desconecte e conecte o Google de novo."
+          : "Não foi possível enviar: " + e.message);
+      }
+    });
+  }, 0);
+  return modalWrap("email", "Enviar e-mail", "mail", body, foot);
 }
 
 function addEvent(e) {
@@ -2154,6 +2234,7 @@ function renderDashboard() {
 }
 
 /* ---------- Funil de Vendas (Kanban) ---------- */
+const COL_PAGE = 50, TAB_PAGE = 100, ALUNO_PAGE = 60;
 function renderFunil() {
   const q = (ui.funilQ || "").toLowerCase();
   const filt = state.leads.filter(l => l.nome.toLowerCase().includes(q) || (l.email || "").toLowerCase().includes(q) || (l.nicho || "").toLowerCase().includes(q));
@@ -2166,17 +2247,20 @@ function renderFunil() {
       </div></div>
     <div class="kanban">
       ${state.stages.map(s => {
-        const items = filt.filter(l => l.stage === s.id);
-        const totalV = items.reduce((a, l) => a + l.valor, 0);
-        return `<div class="col" data-stage="${s.id}">
-          <div class="col-h"><span class="col-tag" style="background:${s.cor}"></span><span class="col-t">${esc(s.nome)}</span><span class="col-c">${items.length}</span></div>
+        const todos = filt.filter(l => l.stage === s.id);
+        const totalV = todos.reduce((a, l) => a + l.valor, 0);
+        // Só desenha os primeiros cartões: milhares de cartões travam o celular. "Ver mais" libera mais 50.
+        const lim = (ui.colLimit && ui.colLimit[s.id]) || COL_PAGE;
+        const items = todos.slice(0, lim);
+        return `<div class="col" data-stage="${esc(s.id)}">
+          <div class="col-h"><span class="col-tag" style="background:${s.cor}"></span><span class="col-t">${esc(s.nome)}</span><span class="col-c">${todos.length}</span></div>
           <div style="padding:0 14px 6px;font-size:11.5px;color:var(--text-3);font-family:var(--font-m);font-weight:600">${brlk(totalV)}</div>
-          <div class="col-body">${items.map(l => `<div class="lcard" draggable="true" data-lead-id="${l.id}" style="border-left-color:${PRI[l.pri].c}">
+          <div class="col-body">${items.map(l => `<div class="lcard" draggable="true" data-lead-id="${esc(l.id)}" style="border-left-color:${PRI[l.pri].c}">
               <div class="lcard-t">${esc(l.nome)}</div><div class="lcard-s">${icon("shopping-bag", 12)}${esc(l.nicho)}${l.jaVende === "Sim" ? " · já vende" : ""}</div>
               <div style="display:flex;gap:5px;flex-wrap:wrap"><span class="chip" style="background:${PRI[l.pri].b};color:${PRI[l.pri].c}">${PRI[l.pri].l}</span><span class="chip" style="background:var(--surface-2);color:var(--text-2)">${esc(l.origem)}</span></div>
               <div class="lcard-f"><span class="lcard-v">${brl(l.valor)}</span><div class="mini-ava" style="background:${avatarColor(l.resp)}">${initials(l.resp)}</div></div>
               ${l.follow && !["fechado", "perdido"].includes(l.stage) ? `<div style="margin-top:8px;font-size:11px;color:var(--warn);display:flex;align-items:center;gap:5px">${icon("clock", 12)}Follow-up: ${esc(l.follow)}</div>` : ""}
-            </div>`).join("") || `<div style="font-size:12px;color:var(--text-3);text-align:center;padding:18px 0">Solte cartões aqui</div>`}</div>
+            </div>`).join("") || `<div style="font-size:12px;color:var(--text-3);text-align:center;padding:18px 0">Solte cartões aqui</div>`}${todos.length > items.length ? `<button class="btn btn-g" style="width:100%;justify-content:center;margin-top:6px" data-action="col-mais" data-stage="${esc(s.id)}">Ver mais (${todos.length - items.length})</button>` : ""}</div>
         </div>`;
       }).join("")}
     </div></div>`;
@@ -2189,6 +2273,8 @@ function renderLeadsView() {
   let rows = state.leads.filter(l => (l.nome + l.email + l.wa + l.nicho + l.resp).toLowerCase().includes(q) && (!fReg || l.nivel === fReg));
   rows = rows.slice().sort((a, b) => { const A = a[sort.k], B = b[sort.k]; return (typeof A === "number" ? A - B : String(A).localeCompare(String(B))) * sort.dir; });
   const sel = ui.leadsSel || new Set();
+  const totalRows = rows.length, lim = ui.leadsLimit || TAB_PAGE;
+  const visiveis = rows.slice(0, lim);
   const th = (k, label) => `<th class="sortable" data-sort="${k}"><span style="display:inline-flex;align-items:center;gap:4px">${label}${icon("arrow-up-down", 11)}</span></th>`;
   return `<div class="page">
     <div class="page-head"><div><div class="page-title display">Leads</div><div class="page-sub">${rows.length} registros${sel.size ? ` · ${sel.size} selecionados` : ""}</div></div>
@@ -2207,8 +2293,8 @@ function renderLeadsView() {
       <th style="width:42px"><span class="cbox ${rows.length && rows.every(r => sel.has(r.id)) ? "on" : ""}" id="selAllBox">${rows.length && rows.every(r => sel.has(r.id)) ? icon("check", 12) : ""}</span></th>
       ${th("nome", "Nome")}<th>WhatsApp</th>${th("nivel", "Nível")}${th("nicho", "Nicho")}<th>Etapa</th>${th("resp", "Responsável")}${th("valor", "Valor")}<th>Prob.</th>
     </tr></thead><tbody>
-      ${rows.map(l => { const st = stageOf(l.stage); return `<tr data-lead-id="${l.id}">
-        <td data-nolead><span class="cbox sel-box ${sel.has(l.id) ? "on" : ""}" data-sel-id="${l.id}">${sel.has(l.id) ? icon("check", 12) : ""}</span></td>
+      ${visiveis.map(l => { const st = stageOf(l.stage); return `<tr data-lead-id="${esc(l.id)}">
+        <td data-nolead><span class="cbox sel-box ${sel.has(l.id) ? "on" : ""}" data-sel-id="${esc(l.id)}">${sel.has(l.id) ? icon("check", 12) : ""}</span></td>
         <td><div class="cell-co"><div class="ava" style="width:30px;height:30px;background:${avatarColor(l.nome)};display:grid;place-items:center;color:#fff;font-weight:700;font-family:var(--font-d);font-size:11px;border-radius:50%">${initials(l.nome)}</div>
           <div style="min-width:0"><div style="font-weight:600;white-space:nowrap">${esc(l.nome)}</div><div style="font-size:11.5px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px">${esc(l.email)}</div></div></div></td>
         <td class="mono" style="font-size:12px;white-space:nowrap">${esc(l.wa || "—")}</td><td style="font-size:12.5px">${esc(l.nivel)}</td>
@@ -2218,7 +2304,8 @@ function renderLeadsView() {
         <td class="mono" style="font-weight:700;color:var(--ok);white-space:nowrap">${brl(l.valor)}</td>
         <td><div style="display:flex;align-items:center;gap:7px"><div class="bar-track" style="width:46px;margin-top:0"><div class="bar-fill" style="width:${l.prob}%;background:${l.prob >= 70 ? "var(--ok)" : l.prob >= 40 ? "var(--warn)" : "var(--bad)"}"></div></div><span class="mono" style="font-size:11.5px;font-weight:600">${l.prob}%</span></div></td>
       </tr>`; }).join("")}
-    </tbody></table></div></div></div>`;
+    </tbody></table></div>
+    ${totalRows > visiveis.length ? `<div style="padding:12px;text-align:center"><button class="btn btn-g" data-action="leads-mais">Mostrar mais (${totalRows - visiveis.length} restantes)</button></div>` : ""}</div></div>`;
 }
 
 /* ---------- Clientes ---------- */
@@ -2229,7 +2316,7 @@ function renderClientes() {
       <div class="head-actions"><button class="btn btn-p" data-action="open-modal" data-modal="cliente">${icon("plus", 16)}Novo Aluno</button></div></div>
     ${clientes.length === 0 ? `<div class="card" style="padding:40px;text-align:center;color:var(--text-3)">Nenhum aluno ainda — mova um lead para "Aluno Matriculado" no funil, ou cadastre um diretamente.</div>` : `
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:15px">
-      ${clientes.map(c => `<div class="card" style="padding:18px;cursor:pointer" data-lead-id="${c.id}">
+      ${clientes.slice(0, ui.alunosLimit || ALUNO_PAGE).map(c => `<div class="card" style="padding:18px;cursor:pointer" data-lead-id="${esc(c.id)}">
         <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px">
           <div class="ava" style="width:46px;height:46px;background:${avatarColor(c.nome)};display:grid;place-items:center;color:#fff;font-weight:700;font-family:var(--font-d);border-radius:50%">${initials(c.nome)}</div>
           <div style="min-width:0"><div style="font-weight:700;font-family:var(--font-d)">${esc(c.nome)}</div><div style="font-size:12px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.email)}</div></div>
@@ -2240,7 +2327,8 @@ function renderClientes() {
           <div><div style="font-size:11px;color:var(--text-3)">Consultor</div><div style="font-size:13px;font-weight:600">${esc(firstName(c.resp))}</div></div>
           <div><div style="font-size:11px;color:var(--text-3)">Nicho</div><div style="font-size:13px;font-weight:600">${esc(c.nicho)}</div></div>
         </div></div>`).join("")}
-    </div>`}</div>`;
+    </div>
+    ${clientes.length > (ui.alunosLimit || ALUNO_PAGE) ? `<div style="padding:14px;text-align:center"><button class="btn btn-g" data-action="alunos-mais">Mostrar mais alunos</button></div>` : ""}`}</div>`;
 }
 
 /* ---------- Atendimento (Central de WhatsApp) ---------- */
@@ -2296,7 +2384,7 @@ function renderAtendimento() {
       <button class="icon-btn" title="Nova conversa" data-action="open-modal" data-modal="conversa" style="background:var(--surface-2)">${icon("plus", 17)}</button>
     </div>
     ${aguardandoCount > 0 ? `<div style="padding:9px 14px;background:var(--warn-weak);color:var(--warn);font-size:12px;font-weight:600;display:flex;align-items:center;gap:7px">${icon("alert-circle", 14)}${aguardandoCount} conversa${aguardandoCount > 1 ? "s" : ""} aguardando atendente</div>` : ""}
-    <div class="conv-scroll">${filtered.map(c => `<div class="conv ${c.id === sel ? "on" : ""}" data-conv-id="${c.id}" style="${c.aguardandoHumano ? "background:var(--warn-weak)" : ""}">
+    <div class="conv-scroll">${filtered.map(c => `<div class="conv ${c.id === sel ? "on" : ""}" data-conv-id="${esc(c.id)}" style="${c.aguardandoHumano ? "background:var(--warn-weak)" : ""}">
         <div style="position:relative"><div class="ava" style="width:44px;height:44px;background:${avatarColor(c.nome)};display:grid;place-items:center;color:#fff;font-weight:700;font-family:var(--font-d);border-radius:50%">${initials(c.nome)}</div>
           <span style="position:absolute;bottom:0;right:0;width:12px;height:12px;border-radius:50%;background:${c.aguardandoHumano ? "var(--warn)" : "var(--wa)"};border:2px solid var(--surface)"></span></div>
         <div class="conv-mid"><div class="conv-top">${c.pin ? icon("pin", 12) : ""}${c.aguardandoHumano ? icon("alert-circle", 12) : ""}<span class="conv-name">${esc(c.nome)}</span><span class="conv-time">${esc(c.time)}</span></div>
@@ -2323,18 +2411,18 @@ function renderAtendimento() {
     <div class="thread-h"><button class="icon-btn only-m" data-action="atendimento-back">${icon("chevron-left", 20)}</button>
       <div class="ava" style="width:40px;height:40px;background:${avatarColor(conv.nome)};display:grid;place-items:center;color:#fff;font-weight:700;font-family:var(--font-d);border-radius:50%">${initials(conv.nome)}</div>
       <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14.5px">${esc(conv.nome)}</div><div style="font-size:12px;color:var(--wa)">${esc(conv.empresa || conv.wa)}</div></div>
-      <select data-action="assign-atendente" data-conv-id="${conv.id}" class="hidden-m" title="Atendente responsável — várias pessoas podem usar o mesmo WhatsApp; isso ajuda a organizar quem está com cada conversa" style="font-size:12px;font-weight:600;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);max-width:130px">
+      <select data-action="assign-atendente" data-conv-id="${esc(conv.id)}" class="hidden-m" title="Atendente responsável — várias pessoas podem usar o mesmo WhatsApp; isso ajuda a organizar quem está com cada conversa" style="font-size:12px;font-weight:600;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface-2);max-width:130px">
         <option value="">Sem atendente</option>
         ${state.equipe.map(n => `<option value="${esc(n)}" ${conv.atendente === n ? "selected" : ""}>${esc(n)}</option>`).join("")}
       </select>
-      ${!conv.leadId ? `<button class="btn btn-p hidden-m" data-action="convert-conv" data-conv-id="${conv.id}">${icon("user-plus", 15)}Converter em Lead</button>` : `<span class="badge hidden-m" style="background:var(--ok-weak);color:var(--ok)">${icon("check-circle-2", 13)}Lead vinculado</span>`}
+      ${!conv.leadId ? `<button class="btn btn-p hidden-m" data-action="convert-conv" data-conv-id="${esc(conv.id)}">${icon("user-plus", 15)}Converter em Lead</button>` : `<span class="badge hidden-m" style="background:var(--ok-weak);color:var(--ok)">${icon("check-circle-2", 13)}Lead vinculado</span>`}
       <a class="icon-btn" title="Ligar de verdade para este número" href="${telLink(conv.wa)}">${icon("phone", 17)}</a>
       <button class="icon-btn" title="Chamada de vídeo (Jitsi Meet, gratuita)" data-action="start-video-call">${icon("video", 17)}</button>
       <a class="icon-btn hidden-m" title="Abrir esta conversa no WhatsApp de verdade" href="${waChatLink(conv.wa)}" target="_blank" rel="noreferrer">${icon("external-link", 17)}</a>
       <button class="icon-btn hidden-m">${icon("star", 17)}</button><button class="icon-btn hidden-m">${icon("archive", 17)}</button><button class="icon-btn">${icon("more-vertical", 17)}</button></div>
     ${conv.aguardandoHumano ? `<div style="padding:10px 18px;background:var(--warn-weak);color:var(--warn);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:10px">
         ${icon("alert-circle", 15)}<span style="flex:1">Cliente aguardando atendimento humano — a automação chamou alguém da equipe.</span>
-        <button class="btn btn-g" style="padding:5px 11px;font-size:12px" data-action="clear-aguardando" data-conv-id="${conv.id}">${icon("check", 13)}Marcar como atendido</button></div>` : ""}
+        <button class="btn btn-g" style="padding:5px 11px;font-size:12px" data-action="clear-aguardando" data-conv-id="${esc(conv.id)}">${icon("check", 13)}Marcar como atendido</button></div>` : ""}
     <div class="msgs" id="msgsScroll"><div class="day-sep">Hoje</div>
       ${conv.msgs.map(m => renderBubble(m)).join("")}
     </div>
@@ -2346,19 +2434,19 @@ function renderAtendimento() {
   const infoPanel = `<div class="info-panel">${lead ? `
     <div class="info-hero"><div class="ava" style="width:64px;height:64px;margin:0 auto;background:${avatarColor(lead.nome)};display:grid;place-items:center;color:#fff;font-weight:700;font-family:var(--font-d);border-radius:50%">${initials(lead.nome)}</div>
       <div style="font-family:var(--font-d);font-weight:800;font-size:17px;margin-top:10px">${esc(lead.nome)}</div><div style="font-size:12.5px;color:var(--text-2)">${esc(lead.email)}</div>
-      <div style="display:flex;justify-content:center;gap:6px;margin-top:10px"><span class="badge" style="background:${stageOf(lead.stage).cor}1f;color:${stageOf(lead.stage).cor}">${stageOf(lead.stage).nome}</span></div></div>
+      <div style="display:flex;justify-content:center;gap:6px;margin-top:10px"><span class="badge" style="background:${stageOf(lead.stage).cor}1f;color:${stageOf(lead.stage).cor}">${esc(stageOf(lead.stage).nome)}</span></div></div>
     <div class="info-sec"><div class="info-sec-t">Perfil do lead</div>
       <div class="info-row"><span class="k">Já vende na Shopee</span><span class="v">${esc(lead.jaVende)}</span></div>
       <div class="info-row"><span class="k">Nível</span><span class="v">${esc(lead.nivel)}</span></div>
       <div class="info-row"><span class="k">Nicho</span><span class="v">${esc(lead.nicho)}</span></div>
       <div class="info-row"><span class="k">Objetivo</span><span class="v">${esc(lead.objetivo)}</span></div></div>
     <div class="info-sec"><div class="info-sec-t">Etapa no funil</div>
-      <select data-action="move-stage-select" data-lead-id="${lead.id}" style="width:100%;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);font-size:13px;font-weight:600;outline:none">
+      <select data-action="move-stage-select" data-lead-id="${esc(lead.id)}" style="width:100%;padding:9px 12px;border-radius:9px;border:1px solid var(--border);background:var(--surface-2);font-size:13px;font-weight:600;outline:none">
         ${state.stages.map(s => `<option value="${s.id}" ${lead.stage === s.id ? "selected" : ""}>${esc(s.nome)}</option>`).join("")}</select></div>
     <div style="padding:16px;display:grid;gap:8px">
-      <button class="btn btn-g" style="justify-content:center" data-action="open-modal" data-modal="tarefa" data-lead-id="${lead.id}">${icon("list-checks", 15)}Criar tarefa</button>
-      <button class="btn btn-g" style="justify-content:center" data-action="download-proposal" data-lead-id="${lead.id}">${icon("file-text", 15)}Baixar proposta</button>
-      <a class="btn btn-g" style="justify-content:center" href="${esc(mailtoLink(lead.email, "Contato — " + lead.nome))}">${icon("mail", 15)}Enviar e-mail</a></div>
+      <button class="btn btn-g" style="justify-content:center" data-action="open-modal" data-modal="tarefa" data-lead-id="${esc(lead.id)}">${icon("list-checks", 15)}Criar tarefa</button>
+      <button class="btn btn-g" style="justify-content:center" data-action="download-proposal" data-lead-id="${esc(lead.id)}">${icon("file-text", 15)}Baixar proposta</button>
+      <button class="btn btn-g" style="justify-content:center" data-action="open-modal" data-modal="email" data-lead-id="${esc(lead.id)}">${icon("mail", 15)}Enviar e-mail</button></div>
   ` : `<div style="padding:40px 22px;text-align:center;color:var(--text-3)">
       <div style="width:60px;height:60px;border-radius:16px;background:var(--surface-2);display:grid;place-items:center;margin:0 auto 14px">${icon("user-plus", 26)}</div>
       <div style="font-weight:600;color:var(--text-2);font-size:14px">Contato não vinculado</div>
@@ -2451,7 +2539,7 @@ function renderTarefas() {
       <div class="head-actions"><button class="btn btn-p" data-action="open-modal" data-modal="tarefa">${icon("plus", 16)}Nova Tarefa</button></div></div>
     <div class="card" style="padding:8px">${tasks.length === 0 ? `<div style="padding:30px;text-align:center;color:var(--text-3);font-size:13px">Nenhuma tarefa ainda.</div>` : tasks.map(t => `
       <div style="display:flex;align-items:center;gap:13px;padding:13px 14px;border-radius:11px">
-        <span class="cbox ${t.done ? "on" : ""}" data-action="toggle-task" data-task-id="${t.id}">${t.done ? icon("check", 12) : ""}</span>
+        <span class="cbox ${t.done ? "on" : ""}" data-action="toggle-task" data-task-id="${esc(t.id)}">${t.done ? icon("check", 12) : ""}</span>
         <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:500;text-decoration:${t.done ? "line-through" : "none"};color:${t.done ? "var(--text-3)" : "var(--text)"}">${esc(t.t)}</div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap">
             <div class="mini-ava" style="background:${avatarColor(t.resp)};width:18px;height:18px;font-size:8px">${initials(t.resp)}</div>
@@ -2459,8 +2547,8 @@ function renderTarefas() {
             <span style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:4px">${icon("clock", 12)}${esc(t.prazo)}</span>
             ${t.leadId && leadName(t.leadId) ? `<span class="chip" style="background:var(--brand-weak);color:var(--brand)">${esc(leadName(t.leadId))}</span>` : ""}</div></div>
         <span class="chip" style="background:${PRI[t.pri].b};color:${PRI[t.pri].c}">${PRI[t.pri].l}</span>
-        <button class="icon-btn" title="Editar tarefa" data-action="edit-task" data-task-id="${t.id}">${icon("edit-2", 16)}</button>
-        <button class="icon-btn" title="Excluir tarefa" data-action="delete-task" data-task-id="${t.id}" style="color:var(--bad)">${icon("trash-2", 16)}</button></div>`).join("")}</div></div>`;
+        <button class="icon-btn" title="Editar tarefa" data-action="edit-task" data-task-id="${esc(t.id)}">${icon("edit-2", 16)}</button>
+        <button class="icon-btn" title="Excluir tarefa" data-action="delete-task" data-task-id="${esc(t.id)}" style="color:var(--bad)">${icon("trash-2", 16)}</button></div>`).join("")}</div></div>`;
 }
 
 /* ---------- Relatórios ---------- */
@@ -2575,7 +2663,7 @@ function renderAutomacao() {
     <div style="display:grid;gap:12px">
       ${regras.length === 0 ? `<div class="card" style="padding:30px;text-align:center;color:var(--text-3);font-size:13px">Nenhuma regra criada ainda.</div>` : regras.map(r => `
         <div class="card" style="padding:16px 18px;display:flex;align-items:center;gap:14px">
-          <button data-action="toggle-auto-rule" data-id="${r.id}" style="width:42px;height:24px;border-radius:14px;background:${r.ativo ? "var(--ok)" : "var(--surface-2)"};position:relative;flex-shrink:0;border:1px solid ${r.ativo ? "var(--ok)" : "var(--border)"}">
+          <button data-action="toggle-auto-rule" data-id="${esc(r.id)}" style="width:42px;height:24px;border-radius:14px;background:${r.ativo ? "var(--ok)" : "var(--surface-2)"};position:relative;flex-shrink:0;border:1px solid ${r.ativo ? "var(--ok)" : "var(--border)"}">
             <span style="position:absolute;top:2px;left:${r.ativo ? "20px" : "2px"};width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s"></span></button>
           <div style="flex:1;min-width:0">
             <div style="font-weight:700;font-size:13.5px">${esc(r.nome)}</div>
@@ -2586,7 +2674,7 @@ function renderAutomacao() {
               ${r.notificarHumano ? `<span class="chip" style="background:var(--warn-weak);color:var(--warn)">${icon("alert-circle", 11)} Avisa a equipe</span>` : ""}
             </div>
           </div>
-          <button class="icon-btn" style="color:var(--bad)" data-action="remove-auto-rule" data-id="${r.id}">${icon("trash-2", 16)}</button>
+          <button class="icon-btn" style="color:var(--bad)" data-action="remove-auto-rule" data-id="${esc(r.id)}">${icon("trash-2", 16)}</button>
         </div>`).join("")}
     </div>
   </div>`;
@@ -3100,7 +3188,7 @@ function modalWrap(id, title, iconName, bodyHtml, footHtml) {
 function closeModal() { $("#modalRoot").innerHTML = ""; ui.modal = null; ui.modalCtx = null; }
 function openModal(type, ctx) {
   ui.modal = type; ui.modalCtx = ctx || null;
-  const builders = { lead: () => modalNovoLead(false), cliente: () => modalNovoLead(true), "lead-edit": () => modalNovoLead(false, ctx), nota: () => modalNota(ctx), "nota-edit": () => modalNota(null, ctx), tarefa: () => modalNovaTarefa(ctx), "tarefa-edit": () => modalNovaTarefa(null, ctx), compromisso: () => modalCompromisso(), "compromisso-edit": () => modalCompromisso(ctx), conversa: () => modalNovaConversa(), etapas: () => modalEtapas(), "wa-connect": () => modalWaConnect(), "form-preview": () => modalFormPreview(), "gcal-config": () => modalGcalConfig(), "form-question-new": () => modalFormQuestion(null), "form-question-edit": () => modalFormQuestion(ctx) };
+  const builders = { lead: () => modalNovoLead(false), cliente: () => modalNovoLead(true), "lead-edit": () => modalNovoLead(false, ctx), nota: () => modalNota(ctx), "nota-edit": () => modalNota(null, ctx), tarefa: () => modalNovaTarefa(ctx), "tarefa-edit": () => modalNovaTarefa(null, ctx), compromisso: () => modalCompromisso(), "compromisso-edit": () => modalCompromisso(ctx), conversa: () => modalNovaConversa(), etapas: () => modalEtapas(), "wa-connect": () => modalWaConnect(), "form-preview": () => modalFormPreview(), "gcal-config": () => modalGcalConfig(), email: () => modalEmail(ctx), "form-question-new": () => modalFormQuestion(null), "form-question-edit": () => modalFormQuestion(ctx) };
   $("#modalRoot").innerHTML = (builders[type] || (() => ""))();
   safeCreateIcons();
   const first = $("#modalBox input, #modalBox select"); if (first) first.focus();
@@ -3572,18 +3660,18 @@ function renderStageListHtml() {
           ${STAGE_COLORS.map(c => `<button data-color="${c}" title="${c}" style="width:22px;height:22px;border-radius:50%;background:${c};border:2px solid ${c === s.cor ? "var(--text)" : "transparent"};flex-shrink:0"></button>`).join("")}
         </div>
         <div style="display:flex;gap:8px"><button class="btn btn-g" style="flex:1;justify-content:center" data-action="stage-cancel-edit">Cancelar</button>
-          <button class="btn btn-p" style="flex:1;justify-content:center" data-action="stage-save-edit" data-id="${s.id}">${icon("check", 14)}Salvar</button></div>
+          <button class="btn btn-p" style="flex:1;justify-content:center" data-action="stage-save-edit" data-id="${esc(s.id)}">${icon("check", 14)}Salvar</button></div>
       </div>`;
     }
     return `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:11px;border:1px solid var(--border);margin-bottom:8px">
       <span style="width:14px;height:14px;border-radius:4px;background:${s.cor};flex-shrink:0"></span>
       <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:600">${esc(s.nome)}</div><div style="font-size:11px;color:var(--text-3)">${qtd} lead${qtd === 1 ? "" : "s"}</div></div>
       <div style="display:flex;flex-direction:column">
-        <button class="icon-btn" style="width:22px;height:16px;${i === 0 ? "opacity:.25;pointer-events:none" : ""}" title="Mover pra cima" data-action="stage-up" data-id="${s.id}">${icon("chevron-up", 13)}</button>
-        <button class="icon-btn" style="width:22px;height:16px;${i === state.stages.length - 1 ? "opacity:.25;pointer-events:none" : ""}" title="Mover pra baixo" data-action="stage-down" data-id="${s.id}">${icon("chevron-down", 13)}</button>
+        <button class="icon-btn" style="width:22px;height:16px;${i === 0 ? "opacity:.25;pointer-events:none" : ""}" title="Mover pra cima" data-action="stage-up" data-id="${esc(s.id)}">${icon("chevron-up", 13)}</button>
+        <button class="icon-btn" style="width:22px;height:16px;${i === state.stages.length - 1 ? "opacity:.25;pointer-events:none" : ""}" title="Mover pra baixo" data-action="stage-down" data-id="${esc(s.id)}">${icon("chevron-down", 13)}</button>
       </div>
-      <button class="icon-btn" style="width:30px;height:30px" title="Renomear/cor" data-action="stage-edit" data-id="${s.id}">${icon("code-2", 14)}</button>
-      <button class="icon-btn" style="width:30px;height:30px;color:var(--bad)" title="Remover" data-action="stage-remove" data-id="${s.id}">${icon("trash-2", 14)}</button>
+      <button class="icon-btn" style="width:30px;height:30px" title="Renomear/cor" data-action="stage-edit" data-id="${esc(s.id)}">${icon("code-2", 14)}</button>
+      <button class="icon-btn" style="width:30px;height:30px;color:var(--bad)" title="Remover" data-action="stage-remove" data-id="${esc(s.id)}">${icon("trash-2", 14)}</button>
     </div>`;
   }).join("");
 }
@@ -3677,8 +3765,8 @@ function renderDrawer() {
     body = !notasDisponivel
       ? `<div style="padding:22px;font-size:13px;color:var(--text-2);line-height:1.6">As anotações ainda não estão ativadas neste CRM. Peça ao administrador para rodar o arquivo <b>schema.sql</b> atualizado no Supabase e recarregue a página.</div>`
       : `<div style="padding:18px 22px 0;display:flex;gap:8px">
-          <button class="btn btn-p" style="flex:1;justify-content:center" data-action="open-modal" data-modal="nota" data-lead-id="${lead.id}">${icon("plus", 15)}Nova anotação</button>
-          <button class="btn btn-g" title="Exportar anotações (CSV)" data-action="nota-export" data-lead-id="${lead.id}">${icon("download", 15)}Exportar</button></div>
+          <button class="btn btn-p" style="flex:1;justify-content:center" data-action="open-modal" data-modal="nota" data-lead-id="${esc(lead.id)}">${icon("plus", 15)}Nova anotação</button>
+          <button class="btn btn-g" title="Exportar anotações (CSV)" data-action="nota-export" data-lead-id="${esc(lead.id)}">${icon("download", 15)}Exportar</button></div>
         <div class="timeline">${minhasNotas.length === 0 ? `<div style="font-size:12.5px;color:var(--text-3);text-align:center;padding:18px 0">Nenhuma anotação ainda. Registre aqui o que o lead conta em chamadas, como ele começou e o que for importante.</div>` :
           minhasNotas.map(n => `<div class="tl-item"><div class="tl-ic" style="background:var(--brand-weak);color:var(--brand)">${icon(notaIcon(n.tipo), 15)}</div>
             <div style="flex:1;min-width:0"><div style="display:flex;align-items:flex-start;gap:6px">
@@ -3691,30 +3779,30 @@ function renderDrawer() {
   } else if (tab === "tarefas") {
     body = `<div style="padding:22px;display:grid;gap:10px">${minhasTarefas.length === 0 ? `<div style="font-size:12.5px;color:var(--text-3);text-align:center;padding:18px 0">Nenhuma tarefa vinculada a este lead ainda.</div>` :
       minhasTarefas.map(t => `<div style="display:flex;align-items:center;gap:11px;padding:13px;background:var(--surface-2);border-radius:11px">
-        <span class="cbox ${t.done ? "on" : ""}" data-action="toggle-task" data-task-id="${t.id}">${t.done ? icon("check", 12) : ""}</span>
+        <span class="cbox ${t.done ? "on" : ""}" data-action="toggle-task" data-task-id="${esc(t.id)}">${t.done ? icon("check", 12) : ""}</span>
         <span style="flex:1;font-size:13.5px;text-decoration:${t.done ? "line-through" : "none"};color:${t.done ? "var(--text-3)" : "var(--text)"}">${esc(t.t)}</span>
         <span class="chip" style="background:${PRI[t.pri].b};color:${PRI[t.pri].c}">${PRI[t.pri].l}</span>
-        <button class="icon-btn" title="Editar tarefa" data-action="edit-task" data-task-id="${t.id}" style="width:30px;height:30px">${icon("edit-2", 15)}</button>
-        <button class="icon-btn" title="Excluir tarefa" data-action="delete-task" data-task-id="${t.id}" style="width:30px;height:30px;color:var(--bad)">${icon("trash-2", 15)}</button></div>`).join("")}
-      <button class="btn btn-g" style="justify-content:center" data-action="open-modal" data-modal="tarefa" data-lead-id="${lead.id}">${icon("plus", 15)}Nova tarefa</button></div>`;
+        <button class="icon-btn" title="Editar tarefa" data-action="edit-task" data-task-id="${esc(t.id)}" style="width:30px;height:30px">${icon("edit-2", 15)}</button>
+        <button class="icon-btn" title="Excluir tarefa" data-action="delete-task" data-task-id="${esc(t.id)}" style="width:30px;height:30px;color:var(--bad)">${icon("trash-2", 15)}</button></div>`).join("")}
+      <button class="btn btn-g" style="justify-content:center" data-action="open-modal" data-modal="tarefa" data-lead-id="${esc(lead.id)}">${icon("plus", 15)}Nova tarefa</button></div>`;
   }
 
   root.innerHTML = `<div class="drawer-bg" data-action="close-drawer"></div><div class="drawer">
     <div class="drawer-h"><div class="ava" style="width:52px;height:52px;background:${avatarColor(lead.nome)};display:grid;place-items:center;color:#fff;font-weight:700;font-family:var(--font-d);font-size:16px;border-radius:50%">${initials(lead.nome)}</div>
       <div style="flex:1;min-width:0"><div style="font-family:var(--font-d);font-weight:800;font-size:19px;letter-spacing:-.02em">${esc(lead.nome)}</div><div style="font-size:13px;color:var(--text-2)">${esc(lead.email)}</div>
         <div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap;align-items:center">
-          <select data-action="move-stage-select" data-lead-id="${lead.id}" style="font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:7px;border:1px solid var(--border);background:${s.cor}1f;color:${s.cor}">
+          <select data-action="move-stage-select" data-lead-id="${esc(lead.id)}" style="font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:7px;border:1px solid var(--border);background:${s.cor}1f;color:${s.cor}">
             ${state.stages.map(st => `<option value="${st.id}" ${lead.stage === st.id ? "selected" : ""}>${esc(st.nome)}</option>`).join("")}</select>
           <span class="badge" style="background:${PRI[lead.pri].b};color:${PRI[lead.pri].c}">Prioridade ${PRI[lead.pri].l}</span></div></div>
       <button class="icon-btn" data-action="close-drawer">${icon("x", 18)}</button></div>
     <div style="display:flex;gap:8px;padding:0 22px 16px">
       <a class="btn btn-p" style="flex:1;justify-content:center" href="${waChatLink(lead.wa, "Olá " + (lead.nome || "").split(" ")[0] + ", tudo bem?")}" target="_blank" rel="noreferrer">${icon("message-circle", 15)}WhatsApp</a>
-      <button class="btn btn-g" style="flex:1;justify-content:center" data-action="download-proposal" data-lead-id="${lead.id}">${icon("file-text", 15)}Proposta</button>
+      <button class="btn btn-g" style="flex:1;justify-content:center" data-action="download-proposal" data-lead-id="${esc(lead.id)}">${icon("file-text", 15)}Proposta</button>
       <a class="btn btn-g" href="${telLink(lead.tel || lead.wa)}">${icon("phone", 15)}</a>
-      <a class="btn btn-g" href="${esc(mailtoLink(lead.email, "Contato — " + lead.nome))}">${icon("mail", 15)}</a></div>
+      <button class="btn btn-g" title="Enviar e-mail" data-action="open-modal" data-modal="email" data-lead-id="${esc(lead.id)}">${icon("mail", 15)}</button></div>
     <div style="display:flex;gap:8px;padding:0 22px 16px">
-      <button class="btn btn-g" style="flex:1;justify-content:center" data-action="open-modal" data-modal="lead-edit" data-lead-id="${lead.id}">${icon("edit-2", 15)}Editar</button>
-      <button class="btn btn-g" style="flex:1;justify-content:center;color:var(--bad)" data-action="delete-lead" data-lead-id="${lead.id}">${icon("trash-2", 15)}Excluir</button></div>
+      <button class="btn btn-g" style="flex:1;justify-content:center" data-action="open-modal" data-modal="lead-edit" data-lead-id="${esc(lead.id)}">${icon("edit-2", 15)}Editar</button>
+      <button class="btn btn-g" style="flex:1;justify-content:center;color:var(--bad)" data-action="delete-lead" data-lead-id="${esc(lead.id)}">${icon("trash-2", 15)}Excluir</button></div>
     ${tabsHtml}<div class="drawer-body">${body}</div></div>`;
 }
 
@@ -3993,6 +4081,9 @@ function setupGlobalEvents() {
         });
         break;
       }
+      case "col-mais": { const id = el.dataset.stage; ui.colLimit = ui.colLimit || {}; ui.colLimit[id] = (ui.colLimit[id] || COL_PAGE) + COL_PAGE; render(); break; }
+      case "leads-mais": ui.leadsLimit = (ui.leadsLimit || TAB_PAGE) + TAB_PAGE * 2; render(); break;
+      case "alunos-mais": ui.alunosLimit = (ui.alunosLimit || ALUNO_PAGE) + ALUNO_PAGE; render(); break;
       case "gcal-config": openModal("gcal-config"); break;
       case "gcal-connect": gcalConectar(); break;
       case "gcal-modal-connect": gcalConectar(gcalBoxAtualizar); break;
@@ -4021,7 +4112,7 @@ function setupGlobalEvents() {
 
   document.addEventListener("input", (e) => {
     if (e.target.id === "globalSearch") { ui.searchQ = e.target.value; renderSearchResults(); return; }
-    if (e.target.id === "leadsSearch") { ui.leadsQ = e.target.value; rerenderPreservingFocus(); return; }
+    if (e.target.id === "leadsSearch") { ui.leadsQ = e.target.value; ui.leadsLimit = 0; rerenderPreservingFocus(); return; }
     if (e.target.id === "funilSearch") { ui.funilQ = e.target.value; rerenderPreservingFocus(); return; }
     if (e.target.id === "atendimentoSearch") { ui.atendimentoQ = e.target.value; rerenderPreservingFocus(); return; }
     const integrField = e.target.closest("[data-action='integr-field']");
@@ -4154,10 +4245,10 @@ function renderSearchResults() {
   const results = state.leads.filter(l => (l.nome + l.email + l.wa + l.nicho).toLowerCase().includes(q.toLowerCase())).slice(0, 7);
   box.style.display = "block";
   box.innerHTML = results.length === 0 ? `<div style="padding:16px;font-size:13px;color:var(--text-3)">Nenhum resultado para "${esc(q)}"</div>` :
-    results.map(l => `<div data-action="search-pick" data-lead-id="${l.id}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer">
+    results.map(l => `<div data-action="search-pick" data-lead-id="${esc(l.id)}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer">
       <div class="ava" style="width:28px;height:28px;background:${avatarColor(l.nome)};display:grid;place-items:center;color:#fff;font-weight:700;font-family:var(--font-d);font-size:10px;border-radius:50%">${initials(l.nome)}</div>
       <div style="min-width:0;flex:1"><div style="font-size:13px;font-weight:600">${esc(l.nome)}</div><div style="font-size:11.5px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.email)}</div></div>
-      <span class="badge" style="background:${stageOf(l.stage).cor}1f;color:${stageOf(l.stage).cor};flex-shrink:0">${stageOf(l.stage).nome}</span></div>`).join("");
+      <span class="badge" style="background:${stageOf(l.stage).cor}1f;color:${stageOf(l.stage).cor};flex-shrink:0">${esc(stageOf(l.stage).nome)}</span></div>`).join("");
   $$("[data-action='search-pick']", box).forEach(el => el.addEventListener("mousedown", () => {
     ui.drawerLeadId = el.dataset.leadId; ui.drawerTab = "dados"; ui.searchQ = ""; $("#globalSearch").value = ""; box.style.display = "none"; render();
   }));

@@ -30,6 +30,8 @@ create table if not exists public.leads (
 
 create index if not exists leads_stage_idx on public.leads (stage);
 create index if not exists leads_created_idx on public.leads (created_at desc);
+create index if not exists leads_email_idx on public.leads (lower(email));
+create index if not exists leads_wa10_idx on public.leads (right(regexp_replace(coalesce(wa, ''), '\D', '', 'g'), 10));
 
 -- ---------------------------------------------------------------------------
 -- Estado compartilhado da equipe: tarefas, agenda, equipe, meta, etapas do
@@ -345,3 +347,45 @@ create table if not exists public.gcal_conexao (
   atualizado    timestamptz not null default now()
 );
 alter table public.gcal_conexao enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Endurecimento (OWASP A01/A04/A05 + boas práticas do Supabase)
+-- Defesa em camadas: além do RLS, tiramos os privilégios que ninguém precisa.
+-- ---------------------------------------------------------------------------
+
+-- Visitante sem login (anon) não acessa nenhuma tabela de dados, nem com RLS errado no futuro.
+-- A única exceção é LER as perguntas do formulário público (e enviar pela função enviar_formulario).
+revoke all on public.leads, public.kv, public.lead_notas, public.form_respostas, public.gcal_conexao from anon;
+revoke all on public.formularios from anon;
+grant select on public.formularios to anon;
+
+-- Token de renovação do Google: nem usuário logado enxerga; só a função do Netlify (service_role).
+revoke all on public.gcal_conexao from authenticated;
+
+-- Equipe logada faz o dia a dia (ler/gravar/apagar), mas não precisa truncar tabelas nem criar gatilhos.
+revoke truncate, references, trigger on public.leads, public.kv, public.lead_notas, public.form_respostas, public.formularios from authenticated;
+
+-- Tabelas futuras criadas no schema public não nascem abertas para o visitante.
+alter default privileges in schema public revoke all on tables from anon;
+alter default privileges in schema public revoke all on functions from anon;
+
+-- A função do gatilho não deve ser chamável pela API.
+revoke all on function public.touch_updated_at() from public, anon, authenticated;
+
+-- Limites de dados (a API é pública, então o banco também valida). "not valid" não reprova linhas antigas.
+do $$
+begin
+  begin alter table public.leads add constraint leads_pri_chk check (pri in ('alta', 'media', 'baixa')) not valid;
+    exception when duplicate_object then null; end;
+  begin alter table public.leads add constraint leads_prob_chk check (prob between 0 and 100) not valid;
+    exception when duplicate_object then null; end;
+  begin alter table public.leads add constraint leads_texto_chk check (
+      length(nome) <= 200 and length(coalesce(email, '')) <= 200 and length(coalesce(wa, '')) <= 60 and length(coalesce(tel, '')) <= 60
+    ) not valid; exception when duplicate_object then null; end;
+  begin alter table public.lead_notas add constraint lead_notas_texto_chk check (length(titulo) <= 300 and length(texto) <= 20000) not valid;
+    exception when duplicate_object then null; end;
+  begin alter table public.kv add constraint kv_tamanho_chk check (pg_column_size(value) <= 2000000) not valid;
+    exception when duplicate_object then null; end;
+  begin alter table public.formularios add constraint formularios_tamanho_chk check (pg_column_size(config) <= 3000000) not valid;
+    exception when duplicate_object then null; end;
+end $$;

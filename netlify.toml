@@ -1,4 +1,5 @@
-# Site estático (sem build). A única parte "servidor" é a função do link do formulário.
+# Site estático (sem build). A única parte "servidor" é a função do link do formulário
+# e a função do Google Agenda.
 
 [functions]
   directory = "netlify/functions"
@@ -16,3 +17,45 @@
   to = "/.netlify/functions/formulario?img=1"
   status = 200
   force = true
+
+# ---------------------------------------------------------------------------
+# Cabeçalhos de segurança (OWASP A05). Valem para o site todo.
+# SAMEORIGIN (e não DENY) porque o CRM mostra o formulário num iframe de pré-visualização.
+# ---------------------------------------------------------------------------
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"
+
+# CRM (index.html). 'unsafe-inline' é necessário porque o app é um arquivo único com
+# <script> e <style> embutidos; o resto é restrito às origens que o app realmente usa.
+# COOP "same-origin-allow-popups" mantém o popup de login do Google funcionando.
+[[headers]]
+  for = "/"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https://wwtwcstvbcybawhodhob.supabase.co wss://wwtwcstvbcybawhodhob.supabase.co https://www.googleapis.com https://accounts.google.com https://brasilapi.com.br; frame-src 'self' https://accounts.google.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://accounts.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' data: blob:; connect-src 'self' https://wwtwcstvbcybawhodhob.supabase.co wss://wwtwcstvbcybawhodhob.supabase.co https://www.googleapis.com https://accounts.google.com https://brasilapi.com.br; frame-src 'self' https://accounts.google.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    Cache-Control = "no-cache"
+
+# Formulário público: precisa do Supabase, das fontes e (opcional) do pixel do Facebook.
+# Só pode ser embutido no próprio domínio (pré-visualização do CRM).
+[[headers]]
+  for = "/formulario.html"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://www.facebook.com; connect-src 'self' https://wwtwcstvbcybawhodhob.supabase.co https://www.facebook.com https://connect.facebook.net; frame-ancestors 'self'; base-uri 'self'; form-action 'none'; object-src 'none'"
+
+# Funções: respostas JSON nunca ficam em cache.
+[[headers]]
+  for = "/.netlify/functions/gcal"
+  [headers.values]
+    Cache-Control = "no-store"
