@@ -1338,8 +1338,8 @@ function addTask(t) {
 }
 /* ---------- Google Agenda (direto do navegador, sem servidor) ---------- */
 const GCAL_API = "https://www.googleapis.com/calendar/v3";
-// gmail.send: só permite enviar e-mails (não lê a caixa de entrada)
-const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.send";
+// Para ligar o envio de e-mail pelo Gmail, acrescentar " https://www.googleapis.com/auth/gmail.send" aqui (ver CLAUDE.md)
+const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 let gisPromise = null;
 function carregarGis() {
   if (window.google && google.accounts && google.accounts.oauth2) return Promise.resolve();
@@ -2446,7 +2446,7 @@ function renderAtendimento() {
     <div style="padding:16px;display:grid;gap:8px">
       <button class="btn btn-g" style="justify-content:center" data-action="open-modal" data-modal="tarefa" data-lead-id="${esc(lead.id)}">${icon("list-checks", 15)}Criar tarefa</button>
       <button class="btn btn-g" style="justify-content:center" data-action="download-proposal" data-lead-id="${esc(lead.id)}">${icon("file-text", 15)}Baixar proposta</button>
-      <button class="btn btn-g" style="justify-content:center" data-action="open-modal" data-modal="email" data-lead-id="${esc(lead.id)}">${icon("mail", 15)}Enviar e-mail</button></div>
+      <a class="btn btn-g" style="justify-content:center" href="${esc(mailtoLink(lead.email, "Contato — " + lead.nome))}">${icon("mail", 15)}Enviar e-mail</a></div>
   ` : `<div style="padding:40px 22px;text-align:center;color:var(--text-3)">
       <div style="width:60px;height:60px;border-radius:16px;background:var(--surface-2);display:grid;place-items:center;margin:0 auto 14px">${icon("user-plus", 26)}</div>
       <div style="font-weight:600;color:var(--text-2);font-size:14px">Contato não vinculado</div>
@@ -3799,7 +3799,7 @@ function renderDrawer() {
       <a class="btn btn-p" style="flex:1;justify-content:center" href="${waChatLink(lead.wa, "Olá " + (lead.nome || "").split(" ")[0] + ", tudo bem?")}" target="_blank" rel="noreferrer">${icon("message-circle", 15)}WhatsApp</a>
       <button class="btn btn-g" style="flex:1;justify-content:center" data-action="download-proposal" data-lead-id="${esc(lead.id)}">${icon("file-text", 15)}Proposta</button>
       <a class="btn btn-g" href="${telLink(lead.tel || lead.wa)}">${icon("phone", 15)}</a>
-      <button class="btn btn-g" title="Enviar e-mail" data-action="open-modal" data-modal="email" data-lead-id="${esc(lead.id)}">${icon("mail", 15)}</button></div>
+      <a class="btn btn-g" href="${esc(mailtoLink(lead.email, "Contato — " + lead.nome))}">${icon("mail", 15)}</a></div>
     <div style="display:flex;gap:8px;padding:0 22px 16px">
       <button class="btn btn-g" style="flex:1;justify-content:center" data-action="open-modal" data-modal="lead-edit" data-lead-id="${esc(lead.id)}">${icon("edit-2", 15)}Editar</button>
       <button class="btn btn-g" style="flex:1;justify-content:center;color:var(--bad)" data-action="delete-lead" data-lead-id="${esc(lead.id)}">${icon("trash-2", 15)}Excluir</button></div>
