@@ -4,6 +4,14 @@
 [functions]
   directory = "netlify/functions"
 
+# Domínio do formulário: a raiz abre o formulário, não o login do CRM.
+# Regra com host completo vale só para esse domínio; o crm.publicacademy.com.br não é afetado.
+[[redirects]]
+  from = "https://mentoria.publicacademy.com.br/"
+  to = "https://mentoria.publicacademy.com.br/formulario"
+  status = 302
+  force = true
+
 # Link limpo do formulário, sem .html (e com o cartão de compartilhamento do WhatsApp)
 [[redirects]]
   from = "/formulario"
