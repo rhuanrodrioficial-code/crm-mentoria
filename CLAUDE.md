@@ -14,7 +14,7 @@ CRM de vendas para a mentoria **Viver de Shopee**. A equipe comercial acompanha 
   - **Google Cloud:** o app OAuth precisa estar **Em produção** (Público-alvo); em "Testando" o token de renovação morre em 7 dias. Origem autorizada: `https://crm.publicacademy.com.br`; sem URI de redirecionamento (popup usa `postmessage`).
   - **Na tela:** eventos do Google que não foram criados pelo CRM aparecem no calendário mensal, em "Compromissos de hoje" (Agenda) e em "Agenda de Hoje" (Painel), via `gcalExternos()`/`agendaHojeLista()`. Compromissos do CRM e do Google têm editar e excluir (`gcalEditar` faz PATCH; excluir faz DELETE). "Hoje" usa data local (`hojeLocalStr()`), não o `TODAY_STR` (UTC).
 - **Fontes:** Google Fonts (Plus Jakarta Sans, Inter, JetBrains Mono). Ícones são SVGs inline no objeto `ICONS` (sem biblioteca externa).
-- **Hospedagem:** Netlify (projeto `crmpublicacademy`, site estático + funções). DNS no Registro.br, subdomínio `crm.publicacademy.com.br` via CNAME. **O deploy é manual, arrastando uma pasta em Deploys** (o site NÃO está ligado ao GitHub: `git push` não publica). Arraste uma pasta limpa só com `index.html`, `formulario.html`, `netlify.toml` e `netlify/` (nunca a pasta do projeto inteira: leva `supabase/` e `.claude/`); pasta, não zip, senão as funções não sobem. Existe um site sobrando `eloquent-churros-c8d3f7` (criado ao tentar ligar o GitHub), pode ser excluído.
+- **Hospedagem:** Netlify (projeto `crmpublicacademy`, site estático + funções). DNS no Registro.br, subdomínio `crm.publicacademy.com.br` via CNAME. **O deploy é manual, arrastando uma pasta em Deploys** (o site NÃO está ligado ao GitHub: `git push` não publica). Arraste uma pasta limpa só com `index.html`, `formulario.html`, `privacidade.html`, `termos.html`, `netlify.toml` e `netlify/` (nunca a pasta do projeto inteira: leva `supabase/` e `.claude/`); pasta, não zip, senão as funções não sobem. Existe um site sobrando `eloquent-churros-c8d3f7` (criado ao tentar ligar o GitHub), pode ser excluído.
 - **Repositório:** https://github.com/rhuanrodrioficial-code/crm-mentoria (privado, branch `main`).
 - **Projeto Supabase:** `https://wwtwcstvbcybawhodhob.supabase.co`. A anon key está no `index.html` (`SUPABASE_ANON_KEY`); é pública por desenho e protegida por RLS. **Nunca** colocar a `service_role` no código.
 
@@ -24,6 +24,8 @@ CRM de vendas para a mentoria **Viver de Shopee**. A equipe comercial acompanha 
 CRM Mentorados/
 ├── index.html            # o app inteiro (CSS no <style>, JS no <script>)
 ├── formulario.html       # formulário público que o cliente preenche (página separada, sem login)
+├── privacidade.html      # Política de Privacidade pública (/privacidade), exigida pelo Google
+├── termos.html           # Termos de Serviço públicos (/termos), exigidos pelo Google
 ├── netlify.toml          # reescritas: /formulario e /formulario-imagem -> função
 ├── netlify/functions/formulario.js  # serve o link limpo /formulario com o cartão de compartilhamento (og:tags)
 ├── netlify/functions/gcal.js        # mantém o Google Agenda conectado (token de renovação no servidor)
